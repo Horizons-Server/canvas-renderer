@@ -50,6 +50,10 @@ let config = {
    *
    * styles are drawn from top to bottom, which allows for
    * multiple strokes of varying sizes
+   *
+   * to allow for smooth transitions between connections, connections
+   * are painted synonymously
+   *
    */
   connectionTypes: {
     road: {

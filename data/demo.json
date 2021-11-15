@@ -15,6 +15,20 @@
       "name": "Example Road",
       "width": 10,
       "nodes": ["e", "f", "g"]
+    },
+    {
+      "id": "j",
+      "type": "rail",
+      "name": "Example Rail",
+      "width": 10,
+      "nodes": ["e", "a"]
+    },
+    {
+      "id": "j",
+      "type": "road",
+      "name": "Second Road",
+      "width": 10,
+      "nodes": ["e", "c"]
     }
   ],
   "nodes": {

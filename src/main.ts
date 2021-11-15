@@ -8,6 +8,9 @@ const ctx = canvas.getContext("2d");
 if (!ctx) throw new Error("Could not create context");
 canvas.width = innerWidth;
 canvas.height = innerHeight;
+let canvasOffsetX = 0;
+let canvasOffsetY = 0;
+let fontSize = 15;
 let mouse = {
   x: 0,
   y: 0,
@@ -65,23 +68,40 @@ addEventListener("mouseup", function () {
   isDragging = false;
 });
 
+let perfTotal = 0;
+let perfCount = 0;
+
 /**
  * animate - draws a new frame
  */
 function animate() {
   if (!ctx || !canvas) return;
 
+  let start = performance.now();
+
+  //clear rect
+  ctx.clearRect(-canvasOffsetX, -canvasOffsetY, canvas.width, canvas.height);
+
   //handle offset
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  if (isDragging) ctx.translate(mouse.offsetX, mouse.offsetY);
+  if (isDragging) {
+    ctx.translate(mouse.offsetX, mouse.offsetY);
+    canvasOffsetX += mouse.offsetX;
+    canvasOffsetY += mouse.offsetY;
+  }
   mouse.offsetX = 0;
   mouse.offsetY = 0;
 
   //handle drawing
   drawComponents();
   drawConnections();
+  renderAllText();
 
-  console.log("FRAME");
+  let end = performance.now();
+  perfCount++;
+  perfTotal += end - start;
+
+  console.log("frame took", end - start, "ms (/16ms)");
+  console.log("AVG frame took", perfTotal / perfCount, "ms (/16ms)");
 }
 
 /**
@@ -153,25 +173,36 @@ function drawComponents() {
 function drawConnections() {
   if (!ctx || !canvas) return;
 
-  connections.forEach((connection) => {
-    //draw line
-    ctx.beginPath();
-    connection.nodes.forEach((node, i) => {
-      let currentNode = nodes[node];
+  let paintingConnections = true;
+  let indexToPaint = 0;
 
-      if (i == 0) {
-        ctx.moveTo(currentNode.x, currentNode.z);
-      } else {
-        ctx.lineTo(currentNode.x, currentNode.z);
-      }
-    });
+  while (paintingConnections) {
+    paintingConnections = false;
 
-    //get type from config
-    let typeList = config.connectionTypes[connection.type]?.appearance?.light;
-    if (typeList == undefined) return;
+    connections.forEach((connection) => {
+      //draw line
+      ctx.beginPath();
+      connection.nodes.forEach((node, i) => {
+        let currentNode = nodes[node];
 
-    //paint type to canvas
-    typeList.forEach((type: any) => {
+        if (i == 0) {
+          ctx.moveTo(currentNode.x, currentNode.z);
+        } else {
+          ctx.lineTo(currentNode.x, currentNode.z);
+        }
+      });
+
+      //get type from config
+      let typeList = config.connectionTypes[connection.type]?.appearance?.light;
+      if (typeList == undefined) return;
+
+      let type = typeList[indexToPaint];
+
+      if (!type) return;
+
+      //paint type to canvas
+      paintingConnections = true;
+
       ctx.save();
 
       setProperties(type);
@@ -182,6 +213,89 @@ function drawConnections() {
 
       ctx.restore();
     });
+
+    indexToPaint++;
+  }
+}
+
+function fillText(text: string, x: number, y: number, rotation: number) {
+  if (!ctx || !canvas) return;
+
+  ctx.save();
+
+  ctx.translate(x, y); //translate to center of shape
+  //  ctx.rotate((Math.PI / 180) * rotation); //rotate 25 degrees.
+  ctx.rotate(rotation);
+  ctx.translate(-x, -y); //translate center back to 0,0
+
+  ctx.textBaseline = "middle";
+
+  ctx.fillStyle = "#000";
+  ctx.textAlign = "center";
+  ctx.fillText(text, x, y);
+
+  ctx.restore();
+}
+
+function getTextAngle(nodeA: SingleNode, nodeB: SingleNode) {
+  if (nodeA.x > nodeB.x) {
+    let temp = nodeA;
+    nodeA = nodeB;
+    nodeB = temp;
+  }
+
+  let dx = Math.abs(nodeA.x - nodeB.x);
+  let dz = Math.abs(nodeA.z - nodeB.z);
+
+  return Math.atan2(dz, dx);
+}
+
+function renderAllText() {
+  if (!ctx || !canvas) return;
+  connections.forEach((connection) => {
+    if (connection.name == undefined) return;
+
+    connection.nodes.forEach((node, i) => {
+      let currentNode = nodes[node];
+
+      if (i != 0) {
+        let prevNode = nodes[connection.nodes[i - 1]];
+        let angle = getTextAngle(prevNode, currentNode);
+
+        if (connection.name == undefined || currentNode == undefined) return;
+
+        fillText(connection.name, currentNode.x, currentNode.z, angle);
+      }
+    });
+  });
+
+  components.forEach((component) => {
+    if (component.name == undefined) return;
+    let sumX = 0;
+    let sumY = 0;
+    let left = nodes[component.nodes[0]].x;
+    let top = nodes[component.nodes[0]].z;
+    let right = nodes[component.nodes[0]].x;
+    let bottom = nodes[component.nodes[0]].z;
+    let count = 0;
+    component.nodes.forEach((node) => {
+      let currentNode = nodes[node];
+
+      top = Math.min(top, currentNode.z);
+      bottom = Math.max(bottom, currentNode.z);
+      left = Math.min(left, currentNode.x);
+      right = Math.max(right, currentNode.x);
+
+      sumX += currentNode.x;
+      sumY += currentNode.z;
+      count++;
+    });
+
+    if (
+      bottom - top > fontSize &&
+      right - left > ctx.measureText(component.name).width
+    )
+      fillText(component.name, sumX / count, sumY / count, 0);
   });
 }
 
@@ -207,6 +321,7 @@ function loadJson() {
  */
 function setDefaultStyles() {
   setProperties(config.defaultStyles);
+  if (ctx) ctx.font = `${fontSize}px arial`;
 }
 
 loadJson();
