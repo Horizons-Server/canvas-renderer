@@ -3,6 +3,7 @@
   "compileOnSave": true,
   "compilerOptions": {
     "target": "es6",
+    "noImplicitAny": false,
     "module": "commonjs",
     "strict": true,
     "outDir": "build",

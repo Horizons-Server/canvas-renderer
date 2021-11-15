@@ -51,26 +51,48 @@ let config = {
     road: {
       appearance: {
         light: [
-          { lineWidth: "3", strokeStyle: "#000", lineCap: "round" },
-          { lineWidth: "1", strokeStyle: "#ccc", lineCap: "round" },
+          {
+            lineWidth: "3",
+            strokeStyle: "#000",
+          },
+          {
+            lineWidth: "1",
+            strokeStyle: "#ccc",
+          },
         ],
       },
     },
     rail: {
       appearance: {
         light: [
-          { lineWidth: "3", strokeStyle: "#f00", lineCap: "round" },
-          { lineWidth: "1", strokeStyle: "#ccc", lineCap: "round" },
+          {
+            lineWidth: "3",
+            strokeStyle: "#f00",
+            setLineDash: [[20, 20]],
+          },
+          {
+            lineWidth: "1",
+            strokeStyle: "#ccc",
+            setLineDash: [[20, 20]],
+          },
         ],
       },
     },
+  },
+
+  /**
+   * default styles will be used as default on all objects
+   * unless they override
+   */
+  defaultStyles: {
+    lineCap: "round",
+    lineJoin: "round",
   },
 };
 
 /**
  * eventually this will be a uuid
  */
-
 type id = string;
 
 /**

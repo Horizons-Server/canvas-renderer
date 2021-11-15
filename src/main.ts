@@ -6,6 +6,7 @@ const canvas = document.querySelector("canvas");
 if (!canvas) throw new Error("Canvas not Found");
 const ctx = canvas.getContext("2d");
 if (!ctx) throw new Error("Could not create context");
+ctx.save();
 canvas.width = innerWidth;
 canvas.height = innerHeight;
 let mouse = {
@@ -60,6 +61,22 @@ function animate() {
   console.log("FRAME");
 }
 
+function setProperties(properties: { [key: string]: any }) {
+  if (!ctx) return;
+
+  let propertiesToChange = Object.keys(properties);
+  propertiesToChange.forEach((property) => {
+    if (
+      typeof ctx[property] == "function" &&
+      Array.isArray(properties[property])
+    ) {
+      ctx[property](...properties[property]);
+    } else {
+      ctx[property] = properties[property];
+    }
+  });
+}
+
 function drawComponents() {
   if (!ctx || !canvas) return;
 
@@ -75,17 +92,11 @@ function drawComponents() {
     });
     ctx.closePath();
 
-    //@ts-ignore TS goes wild on this line
     let typeList = config.componentTypes[component.type]?.appearance?.light;
     if (typeList == undefined) return;
 
-    typeList.forEach((type: string[]) => {
-      let propertiesToChange = Object.keys(type);
-
-      propertiesToChange.forEach((property) => {
-        //@ts-ignore ctx won't err if config's wrong
-        ctx[property] = type[property];
-      });
+    typeList.forEach((type: any) => {
+      setProperties(type);
 
       if (component.colorOverride != undefined)
         ctx.fillStyle = component.colorOverride;
@@ -94,6 +105,7 @@ function drawComponents() {
 
       ctx.fill();
       ctx.stroke();
+      ctx.restore();
     });
   });
 }
@@ -113,20 +125,19 @@ function drawConnections() {
       }
     });
 
-    //@ts-ignore TS goes wild on this line
     let typeList = config.connectionTypes[connection.type]?.appearance?.light;
     if (typeList == undefined) return;
 
-    typeList.forEach((type: string[]) => {
-      let propertiesToChange = Object.keys(type);
-      propertiesToChange.forEach((property) => {
-        //@ts-ignore ctx won't err if config's wrong
-        ctx[property] = type[property];
-      });
+    typeList.forEach((type: any) => {
+      ctx.save();
+
+      setProperties(type);
 
       if (connection.width) ctx.lineWidth += connection.width;
 
       ctx.stroke();
+
+      ctx.restore();
     });
   });
 }
@@ -135,11 +146,8 @@ function loadJson() {
   config.dataFiles.forEach((fileName) => {
     fetch("../data/" + fileName).then((res) => {
       res.json().then((json) => {
-        //@ts-ignore
         components.push(...json.components);
-        //@ts-ignore
         connections.push(...json.connections);
-        //@ts-ignore
         nodes = Object.assign(nodes, json.nodes);
 
         requestAnimationFrame(animate);
@@ -148,4 +156,9 @@ function loadJson() {
   });
 }
 
+function setDefaultStyles() {
+  setProperties(config.defaultStyles);
+}
+
 loadJson();
+setDefaultStyles();
