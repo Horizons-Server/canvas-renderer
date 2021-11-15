@@ -16,10 +16,29 @@ let mouse = {
 };
 let isDragging = false;
 
-addEventListener("resize", () => {
-  canvas.width = innerWidth;
-  canvas.height = innerHeight;
+function retinaFix() {
+  if (!canvas || !ctx) return;
+
+  // get current size of the canvas
+  let rect = canvas.getBoundingClientRect();
+
+  // increase the actual size of our canvas
+  canvas.width = rect.width * devicePixelRatio;
+  canvas.height = rect.height * devicePixelRatio;
+
+  // ensure all drawing operations are scaled
+  ctx.scale(devicePixelRatio, devicePixelRatio);
+
+  // scale everything down using CSS
+  canvas.style.width = rect.width + "px";
+  canvas.style.height = rect.height + "px";
+
+  setDefaultStyles();
   requestAnimationFrame(animate);
+}
+
+addEventListener("resize", () => {
+  retinaFix();
 });
 
 addEventListener("mousemove", function (e) {
@@ -191,4 +210,5 @@ function setDefaultStyles() {
 }
 
 loadJson();
+retinaFix();
 setDefaultStyles();
