@@ -1,4 +1,3 @@
-#Canvas Renderer
+# canvas-renderer
 
 Render map data to a canvas
-# canvas-renderer
