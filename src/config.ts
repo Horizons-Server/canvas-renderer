@@ -13,6 +13,10 @@ let config = {
       appearance: {
         light: [
           {
+            // FORMAT
+            // ctxProperty: propertyValue
+            // OR
+            // ctxFunction: [parameterA, parameterB, etc]
             fillStyle: "#ccc",
             lineWidth: "4",
             strokeStyle: "#000",
