@@ -19,6 +19,7 @@ let isDragging = false;
 addEventListener("resize", () => {
   canvas.width = innerWidth;
   canvas.height = innerHeight;
+  requestAnimationFrame(animate);
 });
 
 addEventListener("mousemove", function (e) {
