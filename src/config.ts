@@ -60,11 +60,11 @@ let config = {
       appearance: {
         light: [
           {
-            lineWidth: "3",
+            lineWidth: "2",
             strokeStyle: "#000",
           },
           {
-            lineWidth: "1",
+            lineWidth: "0",
             strokeStyle: "#ccc",
           },
         ],
@@ -74,14 +74,14 @@ let config = {
       appearance: {
         light: [
           {
-            lineWidth: "3",
-            strokeStyle: "#f00",
-            setLineDash: [[20, 20]],
+            lineWidth: "2",
+            strokeStyle: "#ccc",
+            setLineDash: [[2, 20]],
+            lineCap: "butt",
           },
           {
-            lineWidth: "1",
+            lineWidth: "-8",
             strokeStyle: "#ccc",
-            setLineDash: [[20, 20]],
           },
         ],
       },

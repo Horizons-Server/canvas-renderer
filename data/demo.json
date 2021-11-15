@@ -21,7 +21,7 @@
       "type": "rail",
       "name": "Example Rail",
       "width": 10,
-      "nodes": ["e", "a"]
+      "nodes": ["e", "d"]
     },
     {
       "id": "j",

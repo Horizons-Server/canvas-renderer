@@ -207,7 +207,8 @@ function drawConnections() {
 
       setProperties(type);
 
-      if (connection.width) ctx.lineWidth += connection.width;
+      if (connection.width)
+        ctx.lineWidth = connection.width + (parseInt(type.lineWidth) ?? 0);
 
       ctx.stroke();
 
