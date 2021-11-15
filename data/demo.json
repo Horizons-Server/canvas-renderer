@@ -5,9 +5,7 @@
       "type": "building",
       "name": "Example Building",
       "description": "Example Building",
-      "nodes": ["a", "b", "c", "d"],
-      "colorOverride": "#f00",
-      "strokeOverride": "#00f"
+      "nodes": ["a", "b", "c", "d"]
     }
   ],
   "connections": [
@@ -23,43 +21,43 @@
     "a": {
       "id": "a",
       "x": 100,
-      "y": 100,
+      "z": 100,
       "connections": []
     },
     "b": {
       "id": "b",
       "x": 200,
-      "y": 100,
+      "z": 100,
       "connections": []
     },
     "c": {
       "id": "c",
       "x": 300,
-      "y": 200,
+      "z": 200,
       "connections": []
     },
     "d": {
       "id": "d",
       "x": 100,
-      "y": 200,
+      "z": 200,
       "connections": []
     },
     "e": {
       "id": "e",
       "x": 300,
-      "y": 300,
+      "z": 300,
       "connections": ["f"]
     },
     "f": {
       "id": "f",
       "x": 300,
-      "y": 400,
+      "z": 400,
       "connections": ["e", "g"]
     },
     "g": {
       "id": "g",
       "x": 500,
-      "y": 500,
+      "z": 500,
       "connections": ["f"]
     }
   }

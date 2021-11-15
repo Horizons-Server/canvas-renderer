@@ -68,31 +68,33 @@ function drawComponents() {
     component.nodes.forEach((node, i) => {
       let currentNode = nodes[node];
       if (i == 0) {
-        ctx.moveTo(currentNode.x, currentNode.y);
+        ctx.moveTo(currentNode.x, currentNode.z);
       } else {
-        ctx.lineTo(currentNode.x, currentNode.y);
+        ctx.lineTo(currentNode.x, currentNode.z);
       }
     });
     ctx.closePath();
 
     //@ts-ignore TS goes wild on this line
-    let type = config.componentTypes[component.type]?.appearance?.light;
-    if (type == undefined) return;
+    let typeList = config.componentTypes[component.type]?.appearance?.light;
+    if (typeList == undefined) return;
 
-    let propertiesToChange = Object.keys(type);
+    typeList.forEach((type: string[]) => {
+      let propertiesToChange = Object.keys(type);
 
-    propertiesToChange.forEach((property) => {
-      //@ts-ignore ctx won't err if config's wrong
-      ctx[property] = type[property];
+      propertiesToChange.forEach((property) => {
+        //@ts-ignore ctx won't err if config's wrong
+        ctx[property] = type[property];
+      });
+
+      if (component.colorOverride != undefined)
+        ctx.fillStyle = component.colorOverride;
+      if (component.strokeOverride != undefined)
+        ctx.strokeStyle = component.strokeOverride;
+
+      ctx.fill();
+      ctx.stroke();
     });
-
-    if (component.colorOverride != undefined)
-      ctx.fillStyle = component.colorOverride;
-    if (component.strokeOverride != undefined)
-      ctx.strokeStyle = component.strokeOverride;
-
-    ctx.fill();
-    ctx.stroke();
   });
 }
 
@@ -103,10 +105,11 @@ function drawConnections() {
     ctx.beginPath();
     connection.nodes.forEach((node, i) => {
       let currentNode = nodes[node];
+
       if (i == 0) {
-        ctx.moveTo(currentNode.x, currentNode.y);
+        ctx.moveTo(currentNode.x, currentNode.z);
       } else {
-        ctx.lineTo(currentNode.x, currentNode.y);
+        ctx.lineTo(currentNode.x, currentNode.z);
       }
     });
 
@@ -121,7 +124,7 @@ function drawConnections() {
         ctx[property] = type[property];
       });
 
-      ctx.lineWidth += connection.width;
+      if (connection.width) ctx.lineWidth += connection.width;
 
       ctx.stroke();
     });
