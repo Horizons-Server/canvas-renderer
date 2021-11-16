@@ -19,8 +19,70 @@ let mouse = {
 };
 let isDragging = false;
 let textAreas: DOMRect[] = [];
-let perfTotal = 0; //performance measuring
-let perfCount = 0;
+
+let verbose = false;
+let firstTime = {};
+let perfTotal = {};
+let perfCount = {};
+let perfAvgs = {};
+let perfMax = {};
+let perfMin = {};
+
+function timings(identifier: string) {
+  if (perfCount[identifier] == undefined) {
+    perfCount[identifier] = 0;
+    perfTotal[identifier] = 0;
+    perfMax[identifier] = -Infinity;
+    perfMin[identifier] = Infinity;
+  }
+
+  if (firstTime[identifier] == undefined) {
+    firstTime[identifier] = performance.now();
+  } else {
+    let start = firstTime[identifier] * 1000;
+    let end = performance.now() * 1000;
+
+    perfTotal[identifier] += end - start;
+    perfCount[identifier]++;
+
+    if (verbose) {
+      console.log(identifier + " took ", end - start, "us (/16,000us)");
+      console.log(
+        "AVG " + identifier + " took",
+        perfTotal[identifier] / perfCount[identifier],
+        "us (/16,000us)"
+      );
+    }
+
+    let rounded = Math.round(perfTotal[identifier] / perfCount[identifier]);
+
+    perfAvgs[identifier] = rounded;
+    perfMax[identifier] = Math.max(rounded, perfMax[identifier]);
+    perfMin[identifier] = Math.min(rounded, perfMax[identifier]);
+
+    firstTime[identifier] = undefined;
+  }
+}
+
+function viewTimings() {
+  console.log(
+    "%c Average Times (μs) ",
+    "background-color: #78c4ff; font-weight: bold"
+  );
+  console.table(perfAvgs);
+  console.log(
+    "%c Minimum Times (μs) ",
+    "background-color: #abffae; font-weight: bold"
+  );
+  console.table(perfMin);
+  console.log(
+    "%c Maximum Times (μs) ",
+    "background-color: #ff8787; font-weight: bold"
+  );
+  console.table(perfMax);
+}
+
+setInterval(viewTimings, 1000);
 
 /**
  * retinaFix - adjust the canvas to be resolution independent
@@ -82,12 +144,16 @@ addEventListener("mouseup", function () {
 function animate() {
   if (!ctx || !canvas) return;
 
-  let start = performance.now();
+  timings("frame");
 
-  //clear rect
-  ctx.clearRect(-canvasOffsetX, -canvasOffsetY, canvas.width, canvas.height);
+  timings("clearRect");
+
+  ctx.fillStyle = "#" + Math.floor(Math.random() * 16777215).toString(16);
+  ctx.fillRect(-canvasOffsetX, -canvasOffsetY, canvas.width, canvas.height);
   textAreas = [];
+  timings("clearRect");
 
+  timings("offset");
   //handle offset
   if (isDragging) {
     ctx.translate(mouse.offsetX, mouse.offsetY);
@@ -96,18 +162,22 @@ function animate() {
   }
   mouse.offsetX = 0;
   mouse.offsetY = 0;
+  timings("offset");
 
   //handle drawing
+  timings("drawComponents");
   drawComponents();
+  timings("drawComponents");
+
+  timings("drawConnections");
   drawConnections();
+  timings("drawConnections");
+
+  timings("renderAllText");
   renderAllText();
+  timings("renderAllText");
 
-  let end = performance.now();
-  perfCount++;
-  perfTotal += end - start;
-
-  console.log("frame took", end - start, "ms (/16ms)");
-  console.log("AVG frame took", perfTotal / perfCount, "ms (/16ms)");
+  timings("frame");
 }
 
 /**
@@ -451,11 +521,8 @@ function renderAllText() {
 
     let remainder = textSpace % totalDistance;
 
-    console.log(totalDistance / textSpace);
-
     //calculate positions of texts and draw them
     for (let i = 0; i <= totalDistance / textSpace; i++) {
-      console.log(connection.name);
       let offset = textSpace * i - textSpace / 2;
       offset += remainder / 2;
 
@@ -469,12 +536,7 @@ function renderAllText() {
             currentNode,
             totalDistance / 2
           );
-          console.log(
-            "FILLING",
-            fillText(connection.name, textPosition.x, textPosition.z, angle)
-          );
-        } else {
-          alert("TOO SMALL");
+          fillText(connection.name, textPosition.x, textPosition.z, angle);
         }
       }
 
