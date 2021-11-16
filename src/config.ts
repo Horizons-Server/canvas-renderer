@@ -1,6 +1,5 @@
 let config = {
   dataFiles: ["demo.json"],
-
   /**
    * Component types define the visual style of drawn components
    * any canvas properties can be configured
@@ -90,7 +89,7 @@ let config = {
 
   /**
    * default styles will be used as default on all objects
-   * unless they override
+   * unless they get overriden of course
    */
   defaultStyles: {
     lineCap: "round",
@@ -98,50 +97,52 @@ let config = {
   },
 };
 
+export { config };
+
 /**
  * eventually this will be a uuid
  */
-type id = string;
+export type id = string;
 
 /**
- * Nodes are points, used to make connections and components
+ * Joints are points, used to make connections and components
  */
-interface SingleNode {
+export interface Joint {
   id: id;
   x: number;
   z: number;
   connections: id[]; //should be kept up-to-date, but not used for rendering
 }
 
-type Nodes = {
-  [key: string]: SingleNode;
+export type Joints = {
+  [key: string]: Joint;
 };
 
 /**
  * Connections are lines, like roads or rails
  */
-interface Connection {
+export interface Connection {
   id: id;
   type: string; //one of the types in the config
   name?: string;
   description?: string;
   width?: number; //width of line (is added to type width)
-  nodes: id[]; //points of the line
+  joints: id[]; //points of the line
 }
 
-type Connections = Connection[];
+export type Connections = Connection[];
 
 /**
  * Components are polygons, like buildings or parks
  */
-interface Component {
+export interface Component {
   id: id;
   type: string; //one of the types in the config
   name?: string;
   description?: string;
-  nodes: id[]; //points of the polygon
+  joints: id[]; //points of the polygon
   colorOverride?: string; //override the fill color for a specific component
   strokeOverride?: string; //override the stroke color for a specific component
 }
 
-type Components = Component[];
+export type Components = Component[];

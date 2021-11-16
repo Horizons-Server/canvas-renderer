@@ -1,7 +1,17 @@
+import {
+  Joint,
+  Joints,
+  Component,
+  Components,
+  Connection,
+  Connections,
+  config,
+} from "./config";
+
 //globals
 let connections: Connections = [];
 let components: Components = [];
-let nodes: Nodes = {};
+let joints: Joints = {};
 const canvas = document.querySelector("canvas");
 if (!canvas) throw new Error("Canvas not Found");
 const ctx = canvas.getContext("2d");
@@ -210,12 +220,12 @@ function drawComponents() {
   components.forEach((component) => {
     //draw shape
     ctx.beginPath();
-    component.nodes.forEach((node, i) => {
-      let currentNode = nodes[node];
+    component.joints.forEach((joint, i) => {
+      let currentJoint = joints[joint];
       if (i == 0) {
-        ctx.moveTo(currentNode.x, currentNode.z);
+        ctx.moveTo(currentJoint.x, currentJoint.z);
       } else {
-        ctx.lineTo(currentNode.x, currentNode.z);
+        ctx.lineTo(currentJoint.x, currentJoint.z);
       }
     });
     ctx.closePath();
@@ -258,13 +268,13 @@ function drawConnections() {
     connections.forEach((connection) => {
       //draw line
       ctx.beginPath();
-      connection.nodes.forEach((node, i) => {
-        let currentNode = nodes[node];
+      connection.joints.forEach((joint, i) => {
+        let currentJoint = joints[joint];
 
         if (i == 0) {
-          ctx.moveTo(currentNode.x, currentNode.z);
+          ctx.moveTo(currentJoint.x, currentJoint.z);
         } else {
-          ctx.lineTo(currentNode.x, currentNode.z);
+          ctx.lineTo(currentJoint.x, currentJoint.z);
         }
       });
 
@@ -404,55 +414,51 @@ function fillText(text: string, x: number, z: number, rotation: number) {
 }
 
 /**
- * getTextAngle - calculate the angle between two points
+ * getTextAngle - calculate the angle between two joints
  *
- * @param  nodeA first node
- * @param  nodeB second node
+ * @param  jointA first joint
+ * @param  jointB second joint
  * @return the angle between them in radians
  */
-function getTextAngle(nodeA: SingleNode, nodeB: SingleNode) {
-  if (nodeA.x > nodeB.x) {
-    let temp = nodeA;
-    nodeA = nodeB;
-    nodeB = temp;
+function getTextAngle(jointA: Joint, jointB: Joint) {
+  if (jointA.x > jointB.x) {
+    let temp = jointA;
+    jointA = jointB;
+    jointB = temp;
   }
 
-  let dx = nodeB.x - nodeA.x;
-  let dz = nodeB.z - nodeA.z;
+  let dx = jointB.x - jointA.x;
+  let dz = jointB.z - jointA.z;
 
   return Math.atan2(dz, dx);
 }
 
 /**
- * getDistanceSquared - returns the distance squared between two nodes
+ * getDistanceSquared - returns the distance squared between two joints
  *
- * @param  nodeA first node
- * @param  nodeB second node
+ * @param  jointA first joint
+ * @param  jointB second joint
  * @return distance squared
  */
-function getDistanceSquared(nodeA: SingleNode, nodeB: SingleNode) {
-  return (nodeA.x - nodeB.x) ** 2 + (nodeA.z - nodeB.z) ** 2;
+function getDistanceSquared(jointA: Joint, jointB: Joint) {
+  return (jointA.x - jointB.x) ** 2 + (jointA.z - jointB.z) ** 2;
 }
 
 /**
  * pointAlongLine - calculates the position of text given the distance along
- * the line between two nodes
+ * the line between two joints
  *
- * @param  nodeA first node
- * @param  nodeB second node
+ * @param  jointA first joint
+ * @param  jointB second joint
  * @param  distance  how far along the line to place the point
  * @return coordinates
  */
-function pointAlongLine(
-  nodeA: SingleNode,
-  nodeB: SingleNode,
-  distance: number
-) {
-  let lineDistance = Math.sqrt(getDistanceSquared(nodeA, nodeB));
+function pointAlongLine(jointA: Joint, jointB: Joint, distance: number) {
+  let lineDistance = Math.sqrt(getDistanceSquared(jointA, jointB));
   let ratio = distance / lineDistance;
 
-  let newX = nodeA.x + (nodeB.x - nodeA.x) * ratio;
-  let newZ = nodeA.z + (nodeB.z - nodeA.z) * ratio;
+  let newX = jointA.x + (jointB.x - jointA.x) * ratio;
+  let newZ = jointA.z + (jointB.z - jointA.z) * ratio;
 
   return {
     x: newX,
@@ -472,21 +478,21 @@ function renderAllText() {
     if (component.name == undefined) return;
     let sumX = 0;
     let sumY = 0;
-    let left = nodes[component.nodes[0]].x;
-    let top = nodes[component.nodes[0]].z;
-    let right = nodes[component.nodes[0]].x;
-    let bottom = nodes[component.nodes[0]].z;
+    let left = joints[component.joints[0]].x;
+    let top = joints[component.joints[0]].z;
+    let right = joints[component.joints[0]].x;
+    let bottom = joints[component.joints[0]].z;
     let count = 0;
-    component.nodes.forEach((node) => {
-      let currentNode = nodes[node];
+    component.joints.forEach((joint) => {
+      let currentJoint = joints[joint];
 
-      top = Math.min(top, currentNode.z);
-      bottom = Math.max(bottom, currentNode.z);
-      left = Math.min(left, currentNode.x);
-      right = Math.max(right, currentNode.x);
+      top = Math.min(top, currentJoint.z);
+      bottom = Math.max(bottom, currentJoint.z);
+      left = Math.min(left, currentJoint.x);
+      right = Math.max(right, currentJoint.x);
 
-      sumX += currentNode.x;
-      sumY += currentNode.z;
+      sumX += currentJoint.x;
+      sumY += currentJoint.z;
       count++;
     });
 
@@ -507,12 +513,12 @@ function renderAllText() {
     let totalDistance = 0;
 
     //calculate the length of the connection
-    connection.nodes.forEach((node, i) => {
+    connection.joints.forEach((joint, i) => {
       if (i != 0) {
-        let currentNode = nodes[node];
-        let prevNode = nodes[connection.nodes[i - 1]];
+        let currentJoint = joints[joint];
+        let prevJoint = joints[connection.joints[i - 1]];
         let segmentDistance = Math.sqrt(
-          getDistanceSquared(currentNode, prevNode)
+          getDistanceSquared(currentJoint, prevJoint)
         );
         totalDistance += segmentDistance;
         totalDistances[i] = totalDistance;
@@ -528,36 +534,36 @@ function renderAllText() {
 
       if (offset < 0) {
         if (textWidth < totalDistance) {
-          let currentNode = nodes[connection.nodes[0]];
-          let prevNode = nodes[connection.nodes[1]];
-          let angle = getTextAngle(prevNode, currentNode);
+          let currentJoint = joints[connection.joints[0]];
+          let prevJoint = joints[connection.joints[1]];
+          let angle = getTextAngle(prevJoint, currentJoint);
           let textPosition = pointAlongLine(
-            prevNode,
-            currentNode,
+            prevJoint,
+            currentJoint,
             totalDistance / 2
           );
           fillText(connection.name, textPosition.x, textPosition.z, angle);
         }
       }
 
-      let indexOfTrailingNode = 0;
+      let trailingJointIndex = 0;
 
       for (let j = 0; j < totalDistances.length; j++) {
         if (totalDistances[j] > offset) {
-          indexOfTrailingNode = j;
+          trailingJointIndex = j;
           j = Infinity;
         }
       }
 
-      if (indexOfTrailingNode == 0) return;
+      if (trailingJointIndex == 0) return;
 
-      let currentNode = nodes[connection.nodes[indexOfTrailingNode]];
-      let prevNode = nodes[connection.nodes[indexOfTrailingNode - 1]];
-      let angle = getTextAngle(prevNode, currentNode);
+      let currentJoint = joints[connection.joints[trailingJointIndex]];
+      let prevJoint = joints[connection.joints[trailingJointIndex - 1]];
+      let angle = getTextAngle(prevJoint, currentJoint);
 
-      offset -= totalDistances[indexOfTrailingNode - 1];
+      offset -= totalDistances[trailingJointIndex - 1];
 
-      let textPosition = pointAlongLine(prevNode, currentNode, offset);
+      let textPosition = pointAlongLine(prevJoint, currentJoint, offset);
 
       fillText(connection.name, textPosition.x, textPosition.z, angle);
     }
@@ -573,7 +579,7 @@ function loadJson() {
       res.json().then((json) => {
         components.push(...json.components);
         connections.push(...json.connections);
-        nodes = Object.assign(nodes, json.nodes);
+        joints = Object.assign(joints, json.joints);
 
         requestAnimationFrame(animate);
       });

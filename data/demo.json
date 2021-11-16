@@ -5,14 +5,14 @@
       "type": "building",
       "name": "Example Building",
       "description": "Example Building",
-      "nodes": ["a", "b", "c", "d"]
+      "joints": ["a", "b", "c", "d"]
     },
     {
       "id": "l",
       "type": "park",
       "name": "Example Park",
       "width": 10,
-      "nodes": ["e", "f", "g"]
+      "joints": ["e", "f", "g"]
     }
   ],
   "connections": [
@@ -21,24 +21,24 @@
       "type": "road",
       "name": "Second Road",
       "width": 10,
-      "nodes": ["e", "c"]
+      "joints": ["e", "c"]
     },
     {
       "id": "i",
       "type": "road",
       "name": "First Road",
       "width": 10,
-      "nodes": ["e", "f", "g"]
+      "joints": ["e", "f", "g"]
     },
     {
       "id": "j",
       "type": "rail",
       "name": "Railway",
       "width": 10,
-      "nodes": ["e", "d"]
+      "joints": ["e", "d"]
     }
   ],
-  "nodes": {
+  "joints": {
     "a": {
       "id": "a",
       "x": 100,
