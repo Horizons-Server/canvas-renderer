@@ -6,29 +6,36 @@
       "name": "Example Building",
       "description": "Example Building",
       "nodes": ["a", "b", "c", "d"]
+    },
+    {
+      "id": "l",
+      "type": "park",
+      "name": "Example Park",
+      "width": 10,
+      "nodes": ["e", "f", "g"]
     }
   ],
   "connections": [
-    {
-      "id": "i",
-      "type": "road",
-      "name": "Example Road",
-      "width": 10,
-      "nodes": ["e", "f", "g"]
-    },
-    {
-      "id": "j",
-      "type": "rail",
-      "name": "Example Rail",
-      "width": 10,
-      "nodes": ["e", "d"]
-    },
     {
       "id": "j",
       "type": "road",
       "name": "Second Road",
       "width": 10,
       "nodes": ["e", "c"]
+    },
+    {
+      "id": "i",
+      "type": "road",
+      "name": "First Road",
+      "width": 10,
+      "nodes": ["e", "f", "g"]
+    },
+    {
+      "id": "j",
+      "type": "rail",
+      "name": "Railway",
+      "width": 10,
+      "nodes": ["e", "d"]
     }
   ],
   "nodes": {
@@ -64,8 +71,8 @@
     },
     "f": {
       "id": "f",
-      "x": 300,
-      "z": 400,
+      "x": 180,
+      "z": 600,
       "connections": ["e", "g"]
     },
     "g": {

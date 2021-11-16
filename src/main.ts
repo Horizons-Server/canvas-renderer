@@ -18,7 +18,13 @@ let mouse = {
   offsetY: 0,
 };
 let isDragging = false;
+let textAreas: DOMRect[] = [];
+let perfTotal = 0; //performance measuring
+let perfCount = 0;
 
+/**
+ * retinaFix - adjust the canvas to be resolution independent
+ */
 function retinaFix() {
   if (!canvas || !ctx) return;
 
@@ -41,6 +47,8 @@ function retinaFix() {
 }
 
 addEventListener("resize", () => {
+  canvasOffsetX = 0;
+  canvasOffsetY = 0;
   retinaFix();
 });
 
@@ -68,9 +76,6 @@ addEventListener("mouseup", function () {
   isDragging = false;
 });
 
-let perfTotal = 0;
-let perfCount = 0;
-
 /**
  * animate - draws a new frame
  */
@@ -81,6 +86,7 @@ function animate() {
 
   //clear rect
   ctx.clearRect(-canvasOffsetX, -canvasOffsetY, canvas.width, canvas.height);
+  textAreas = [];
 
   //handle offset
   if (isDragging) {
@@ -219,25 +225,121 @@ function drawConnections() {
   }
 }
 
-function fillText(text: string, x: number, y: number, rotation: number) {
-  if (!ctx || !canvas) return;
+/**
+ * applyRotationToBox - calculate the area and position of a
+ * bit of text's bounding box
+ *
+ * @param texet the text in the box
+ * @param x the x position of the center of the box
+ * @param x the z position of the center of the box
+ * @param rotation how far to rotate the box in radians
+ * @return rect approximately surrounding the rotated text
+ */
+function applyRotationToBox(
+  text: string,
+  x: number,
+  z: number,
+  rotation: number
+) {
+  if (!ctx) return;
+
+  let textWidth = ctx.measureText(text).width;
+
+  // "magic formula"
+  // uses ratios to approximate the size of the bounding box
+  let halfHeight =
+    fontSize / 2 + (rotation / (Math.PI / 2)) * (textWidth / 2 - fontSize / 2);
+  let halfWidth =
+    fontSize / 2 +
+    ((Math.PI / 2 - rotation) / (Math.PI / 2)) * (textWidth / 2 - fontSize / 2);
+
+  //convert to DOMRect
+  return new DOMRect(
+    x - halfWidth,
+    z - halfHeight,
+    halfWidth * 2,
+    halfHeight * 2
+  );
+}
+
+/**
+ * checkTextOverlap - approximate whether a bit of text would overlap with
+ * some other text
+ *
+ * @param  text     the bit of text in the box
+ * @param  x position of the center of the box
+ * @param  z position of the center of the box
+ * @param  rotation rotation in radians
+ * @return true if text overlaps
+ */
+function checkTextOverlap(
+  text: string,
+  x: number,
+  z: number,
+  rotation: number
+) {
+  for (let i = 0; i < textAreas.length; i++) {
+    let a = textAreas[i];
+    let b = applyRotationToBox(text, x, z, rotation);
+
+    if (
+      b != undefined &&
+      a.left <= b.right &&
+      a.right >= b.left &&
+      a.top <= b.bottom &&
+      a.bottom >= b.top
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * fillText - description
+ *
+ * @param  text text to draw
+ * @param  x position of the center of the box
+ * @param  z position of the center of the box
+ * @param  rotation rotation in radians
+ * @return false if draw failed
+ */
+function fillText(text: string, x: number, z: number, rotation: number) {
+  if (!ctx || !canvas) return false;
+
+  if (checkTextOverlap(text, x, z, rotation)) return false;
+
+  //save text box to check overlap
+  let newRect = applyRotationToBox(text, x, z, rotation);
+  if (newRect) textAreas.push(newRect);
 
   ctx.save();
 
-  ctx.translate(x, y); //translate to center of shape
-  //  ctx.rotate((Math.PI / 180) * rotation); //rotate 25 degrees.
-  ctx.rotate(rotation);
-  ctx.translate(-x, -y); //translate center back to 0,0
+  ctx.translate(x, z); //translate to center of shape
+  //  ctx.rotate((Math.PI / 180) * rotation); //rotate in degrees.
+  ctx.rotate(rotation); //rotate in radians
+  ctx.translate(-x, -z); //translate center back to 0,0
 
   ctx.textBaseline = "middle";
-
   ctx.fillStyle = "#000";
+  ctx.strokeStyle = "#eee";
   ctx.textAlign = "center";
-  ctx.fillText(text, x, y);
+
+  ctx.strokeText(text, x, z);
+  ctx.fillText(text, x, z);
 
   ctx.restore();
+
+  return true;
 }
 
+/**
+ * getTextAngle - calculate the angle between two points
+ *
+ * @param  nodeA first node
+ * @param  nodeB second node
+ * @return the angle between them in radians
+ */
 function getTextAngle(nodeA: SingleNode, nodeB: SingleNode) {
   if (nodeA.x > nodeB.x) {
     let temp = nodeA;
@@ -245,32 +347,58 @@ function getTextAngle(nodeA: SingleNode, nodeB: SingleNode) {
     nodeB = temp;
   }
 
-  let dx = Math.abs(nodeA.x - nodeB.x);
-  let dz = Math.abs(nodeA.z - nodeB.z);
+  let dx = nodeB.x - nodeA.x;
+  let dz = nodeB.z - nodeA.z;
 
   return Math.atan2(dz, dx);
 }
 
+/**
+ * getDistanceSquared - returns the distance squared between two nodes
+ *
+ * @param  nodeA first node
+ * @param  nodeB second node
+ * @return distance squared
+ */
+function getDistanceSquared(nodeA: SingleNode, nodeB: SingleNode) {
+  return (nodeA.x - nodeB.x) ** 2 + (nodeA.z - nodeB.z) ** 2;
+}
+
+/**
+ * pointAlongLine - calculates the position of text given the distance along
+ * the line between two nodes
+ *
+ * @param  nodeA first node
+ * @param  nodeB second node
+ * @param  distance  how far along the line to place the point
+ * @return coordinates
+ */
+function pointAlongLine(
+  nodeA: SingleNode,
+  nodeB: SingleNode,
+  distance: number
+) {
+  let lineDistance = Math.sqrt(getDistanceSquared(nodeA, nodeB));
+  let ratio = distance / lineDistance;
+
+  let newX = nodeA.x + (nodeB.x - nodeA.x) * ratio;
+  let newZ = nodeA.z + (nodeB.z - nodeA.z) * ratio;
+
+  return {
+    x: newX,
+    z: newZ,
+  };
+}
+
+/**
+ * renderAllText - renders all text to the canvas
+ */
 function renderAllText() {
   if (!ctx || !canvas) return;
-  connections.forEach((connection) => {
-    if (connection.name == undefined) return;
 
-    connection.nodes.forEach((node, i) => {
-      let currentNode = nodes[node];
-
-      if (i != 0) {
-        let prevNode = nodes[connection.nodes[i - 1]];
-        let angle = getTextAngle(prevNode, currentNode);
-
-        if (connection.name == undefined || currentNode == undefined) return;
-
-        fillText(connection.name, currentNode.x, currentNode.z, angle);
-      }
-    });
-  });
-
+  // draw components first
   components.forEach((component) => {
+    //find the bounding box of the component
     if (component.name == undefined) return;
     let sumX = 0;
     let sumY = 0;
@@ -297,6 +425,80 @@ function renderAllText() {
       right - left > ctx.measureText(component.name).width
     )
       fillText(component.name, sumX / count, sumY / count, 0);
+  });
+
+  //draw connection texts
+  connections.forEach((connection) => {
+    if (connection.name == undefined) return;
+
+    let textWidth = ctx.measureText(connection.name).width;
+    let textSpace = textWidth * 2;
+    let totalDistances = [0];
+    let totalDistance = 0;
+
+    //calculate the length of the connection
+    connection.nodes.forEach((node, i) => {
+      if (i != 0) {
+        let currentNode = nodes[node];
+        let prevNode = nodes[connection.nodes[i - 1]];
+        let segmentDistance = Math.sqrt(
+          getDistanceSquared(currentNode, prevNode)
+        );
+        totalDistance += segmentDistance;
+        totalDistances[i] = totalDistance;
+      }
+    });
+
+    let remainder = textSpace % totalDistance;
+
+    console.log(totalDistance / textSpace);
+
+    //calculate positions of texts and draw them
+    for (let i = 0; i <= totalDistance / textSpace; i++) {
+      console.log(connection.name);
+      let offset = textSpace * i - textSpace / 2;
+      offset += remainder / 2;
+
+      if (offset < 0) {
+        if (textWidth < totalDistance) {
+          let currentNode = nodes[connection.nodes[0]];
+          let prevNode = nodes[connection.nodes[1]];
+          let angle = getTextAngle(prevNode, currentNode);
+          let textPosition = pointAlongLine(
+            prevNode,
+            currentNode,
+            totalDistance / 2
+          );
+          console.log(
+            "FILLING",
+            fillText(connection.name, textPosition.x, textPosition.z, angle)
+          );
+        } else {
+          alert("TOO SMALL");
+        }
+      }
+
+      let indexOfTrailingNode = 0;
+
+      for (let j = 0; j < totalDistances.length; j++) {
+        if (totalDistances[j] > offset) {
+          indexOfTrailingNode = j;
+          j = Infinity;
+        }
+      }
+
+      if (indexOfTrailingNode == 0) return;
+
+      let currentNode = nodes[connection.nodes[indexOfTrailingNode]];
+      let prevNode = nodes[connection.nodes[indexOfTrailingNode - 1]];
+      let angle = getTextAngle(prevNode, currentNode);
+
+      offset -= totalDistances[indexOfTrailingNode - 1];
+
+      let textPosition = pointAlongLine(prevNode, currentNode, offset);
+
+      fillText(connection.name, textPosition.x, textPosition.z, angle);
+    }
   });
 }
 
