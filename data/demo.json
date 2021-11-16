@@ -1,5 +1,5 @@
 {
-  "components": [
+  "polygons": [
     {
       "id": "h",
       "type": "building",
@@ -15,7 +15,7 @@
       "joints": ["e", "f", "g"]
     }
   ],
-  "connections": [
+  "lines": [
     {
       "id": "j",
       "type": "road",
@@ -42,44 +42,37 @@
     "a": {
       "id": "a",
       "x": 100,
-      "z": 100,
-      "connections": []
+      "z": 100
     },
     "b": {
       "id": "b",
       "x": 200,
-      "z": 100,
-      "connections": []
+      "z": 100
     },
     "c": {
       "id": "c",
       "x": 300,
-      "z": 200,
-      "connections": []
+      "z": 200
     },
     "d": {
       "id": "d",
       "x": 100,
-      "z": 200,
-      "connections": []
+      "z": 200
     },
     "e": {
       "id": "e",
       "x": 300,
-      "z": 300,
-      "connections": ["f"]
+      "z": 300
     },
     "f": {
       "id": "f",
       "x": 180,
-      "z": 600,
-      "connections": ["e", "g"]
+      "z": 600
     },
     "g": {
       "id": "g",
       "x": 500,
-      "z": 500,
-      "connections": ["f"]
+      "z": 500
     }
   }
 }

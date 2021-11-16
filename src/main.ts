@@ -1,16 +1,16 @@
 import {
   Joint,
   Joints,
-  Component,
-  Components,
-  Connection,
-  Connections,
+  Polygon,
+  Polygons,
+  Line,
+  Lines,
   config,
 } from "./config";
 
 //globals
-let connections: Connections = [];
-let components: Components = [];
+let lines: Lines = [];
+let polygons: Polygons = [];
 let joints: Joints = {};
 const canvas = document.querySelector("canvas");
 if (!canvas) throw new Error("Canvas not Found");
@@ -118,11 +118,19 @@ function retinaFix() {
   requestAnimationFrame(animate);
 }
 
-addEventListener("resize", () => {
-  canvasOffsetX = 0;
-  canvasOffsetY = 0;
-  retinaFix();
-});
+addEventListener(
+  "resize",
+  () => {
+    canvasOffsetX = 0;
+    canvasOffsetY = 0;
+
+    canvas.style.width = innerWidth + "px";
+    canvas.style.height = innerHeight + "px";
+
+    retinaFix();
+  },
+  { passive: true }
+);
 
 addEventListener("mousemove", function (e) {
   if (isDragging) {
@@ -175,13 +183,13 @@ function animate() {
   timings("offset");
 
   //handle drawing
-  timings("drawComponents");
-  drawComponents();
-  timings("drawComponents");
+  timings("drawPolygons");
+  drawPolygons();
+  timings("drawPolygons");
 
-  timings("drawConnections");
-  drawConnections();
-  timings("drawConnections");
+  timings("drawLines");
+  drawLines();
+  timings("drawLines");
 
   timings("renderAllText");
   renderAllText();
@@ -212,15 +220,15 @@ function setProperties(properties: { [key: string]: any }) {
 }
 
 /**
- * drawComponents - draws all components to the canvas
+ * drawPolygons - draws all polygons to the canvas
  */
-function drawComponents() {
+function drawPolygons() {
   if (!ctx || !canvas) return;
 
-  components.forEach((component) => {
+  polygons.forEach((polygon) => {
     //draw shape
     ctx.beginPath();
-    component.joints.forEach((joint, i) => {
+    polygon.joints.forEach((joint, i) => {
       let currentJoint = joints[joint];
       if (i == 0) {
         ctx.moveTo(currentJoint.x, currentJoint.z);
@@ -231,7 +239,7 @@ function drawComponents() {
     ctx.closePath();
 
     //get type from config
-    let typeList = config.componentTypes[component.type]?.appearance?.light;
+    let typeList = config.polygonTypes[polygon.type]?.appearance?.light;
     if (typeList == undefined) return;
 
     //paint type to canvas
@@ -240,10 +248,10 @@ function drawComponents() {
 
       setProperties(type);
 
-      if (component.colorOverride != undefined)
-        ctx.fillStyle = component.colorOverride;
-      if (component.strokeOverride != undefined)
-        ctx.strokeStyle = component.strokeOverride;
+      if (polygon.colorOverride != undefined)
+        ctx.fillStyle = polygon.colorOverride;
+      if (polygon.strokeOverride != undefined)
+        ctx.strokeStyle = polygon.strokeOverride;
 
       ctx.fill();
       ctx.stroke();
@@ -254,21 +262,21 @@ function drawComponents() {
 }
 
 /**
- * drawConnections - draw all connections to the canvas
+ * drawLines - draw all lines to the canvas
  */
-function drawConnections() {
+function drawLines() {
   if (!ctx || !canvas) return;
 
-  let paintingConnections = true;
+  let paintingLines = true;
   let indexToPaint = 0;
 
-  while (paintingConnections) {
-    paintingConnections = false;
+  while (paintingLines) {
+    paintingLines = false;
 
-    connections.forEach((connection) => {
+    lines.forEach((line) => {
       //draw line
       ctx.beginPath();
-      connection.joints.forEach((joint, i) => {
+      line.joints.forEach((joint, i) => {
         let currentJoint = joints[joint];
 
         if (i == 0) {
@@ -279,7 +287,7 @@ function drawConnections() {
       });
 
       //get type from config
-      let typeList = config.connectionTypes[connection.type]?.appearance?.light;
+      let typeList = config.lineTypes[line.type]?.appearance?.light;
       if (typeList == undefined) return;
 
       let type = typeList[indexToPaint];
@@ -287,14 +295,14 @@ function drawConnections() {
       if (!type) return;
 
       //paint type to canvas
-      paintingConnections = true;
+      paintingLines = true;
 
       ctx.save();
 
       setProperties(type);
 
-      if (connection.width)
-        ctx.lineWidth = connection.width + (parseInt(type.lineWidth) ?? 0);
+      if (line.width)
+        ctx.lineWidth = line.width + (parseInt(type.lineWidth) ?? 0);
 
       ctx.stroke();
 
@@ -472,18 +480,18 @@ function pointAlongLine(jointA: Joint, jointB: Joint, distance: number) {
 function renderAllText() {
   if (!ctx || !canvas) return;
 
-  // draw components first
-  components.forEach((component) => {
-    //find the bounding box of the component
-    if (component.name == undefined) return;
+  // draw polygons first
+  polygons.forEach((polygon) => {
+    //find the bounding box of the polygon
+    if (polygon.name == undefined) return;
     let sumX = 0;
     let sumY = 0;
-    let left = joints[component.joints[0]].x;
-    let top = joints[component.joints[0]].z;
-    let right = joints[component.joints[0]].x;
-    let bottom = joints[component.joints[0]].z;
+    let left = joints[polygon.joints[0]].x;
+    let top = joints[polygon.joints[0]].z;
+    let right = joints[polygon.joints[0]].x;
+    let bottom = joints[polygon.joints[0]].z;
     let count = 0;
-    component.joints.forEach((joint) => {
+    polygon.joints.forEach((joint) => {
       let currentJoint = joints[joint];
 
       top = Math.min(top, currentJoint.z);
@@ -498,25 +506,25 @@ function renderAllText() {
 
     if (
       bottom - top > fontSize &&
-      right - left > ctx.measureText(component.name).width
+      right - left > ctx.measureText(polygon.name).width
     )
-      fillText(component.name, sumX / count, sumY / count, 0);
+      fillText(polygon.name, sumX / count, sumY / count, 0);
   });
 
-  //draw connection texts
-  connections.forEach((connection) => {
-    if (connection.name == undefined) return;
+  //draw line texts
+  lines.forEach((line) => {
+    if (line.name == undefined) return;
 
-    let textWidth = ctx.measureText(connection.name).width;
+    let textWidth = ctx.measureText(line.name).width;
     let textSpace = textWidth * 2;
     let totalDistances = [0];
     let totalDistance = 0;
 
-    //calculate the length of the connection
-    connection.joints.forEach((joint, i) => {
+    //calculate the length of the line
+    line.joints.forEach((joint, i) => {
       if (i != 0) {
         let currentJoint = joints[joint];
-        let prevJoint = joints[connection.joints[i - 1]];
+        let prevJoint = joints[line.joints[i - 1]];
         let segmentDistance = Math.sqrt(
           getDistanceSquared(currentJoint, prevJoint)
         );
@@ -534,15 +542,15 @@ function renderAllText() {
 
       if (offset < 0) {
         if (textWidth < totalDistance) {
-          let currentJoint = joints[connection.joints[0]];
-          let prevJoint = joints[connection.joints[1]];
+          let currentJoint = joints[line.joints[0]];
+          let prevJoint = joints[line.joints[1]];
           let angle = getTextAngle(prevJoint, currentJoint);
           let textPosition = pointAlongLine(
             prevJoint,
             currentJoint,
             totalDistance / 2
           );
-          fillText(connection.name, textPosition.x, textPosition.z, angle);
+          fillText(line.name, textPosition.x, textPosition.z, angle);
         }
       }
 
@@ -557,15 +565,15 @@ function renderAllText() {
 
       if (trailingJointIndex == 0) return;
 
-      let currentJoint = joints[connection.joints[trailingJointIndex]];
-      let prevJoint = joints[connection.joints[trailingJointIndex - 1]];
+      let currentJoint = joints[line.joints[trailingJointIndex]];
+      let prevJoint = joints[line.joints[trailingJointIndex - 1]];
       let angle = getTextAngle(prevJoint, currentJoint);
 
       offset -= totalDistances[trailingJointIndex - 1];
 
       let textPosition = pointAlongLine(prevJoint, currentJoint, offset);
 
-      fillText(connection.name, textPosition.x, textPosition.z, angle);
+      fillText(line.name, textPosition.x, textPosition.z, angle);
     }
   });
 }
@@ -577,8 +585,8 @@ function loadJson() {
   config.dataFiles.forEach((fileName) => {
     fetch("../data/" + fileName).then((res) => {
       res.json().then((json) => {
-        components.push(...json.components);
-        connections.push(...json.connections);
+        polygons.push(...json.polygons);
+        lines.push(...json.lines);
         joints = Object.assign(joints, json.joints);
 
         requestAnimationFrame(animate);

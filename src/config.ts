@@ -7,7 +7,7 @@ let config = {
    * styles are drawn from top to bottom, which allows for
    * multiple strokes of varying sizes
    */
-  componentTypes: {
+  polygonTypes: {
     building: {
       appearance: {
         light: [
@@ -42,19 +42,19 @@ let config = {
   },
 
   /**
-   * Connection types define the visual style of drawn connections
+   * Line types define the visual style of drawn lines
    * any canvas properties can be configured
    *
-   * connections have no fill, only stroke
+   * lines have no fill, only stroke
    *
    * styles are drawn from top to bottom, which allows for
    * multiple strokes of varying sizes
    *
-   * to allow for smooth transitions between connections, connections
+   * to allow for smooth transitions between lines, lines
    * are painted synonymously
    *
    */
-  connectionTypes: {
+  lineTypes: {
     road: {
       appearance: {
         light: [
@@ -105,13 +105,13 @@ export { config };
 export type id = string;
 
 /**
- * Joints are points, used to make connections and components
+ * Joints are points, used to make lines and components
  */
 export interface Joint {
+  componentType: "joint";
   id: id;
   x: number;
   z: number;
-  connections: id[]; //should be kept up-to-date, but not used for rendering
 }
 
 export type Joints = {
@@ -119,9 +119,10 @@ export type Joints = {
 };
 
 /**
- * Connections are lines, like roads or rails
+ * lines, like roads or rails
  */
-export interface Connection {
+export interface Line {
+  componentType: "Line";
   id: id;
   type: string; //one of the types in the config
   name?: string;
@@ -130,12 +131,13 @@ export interface Connection {
   joints: id[]; //points of the line
 }
 
-export type Connections = Connection[];
+export type Lines = Line[];
 
 /**
  * Components are polygons, like buildings or parks
  */
-export interface Component {
+export interface Polygon {
+  componentType: "Polygon";
   id: id;
   type: string; //one of the types in the config
   name?: string;
@@ -145,4 +147,4 @@ export interface Component {
   strokeOverride?: string; //override the stroke color for a specific component
 }
 
-export type Components = Component[];
+export type Polygons = Polygon[];
