@@ -2,9 +2,10 @@
   "compilerOptions": {
     "allowSyntheticDefaultImports": true,
     "noImplicitAny": false,
-    "module": "es6",
+    "module": "commonjs",
     "target": "es5",
     "allowJs": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  "module-resolution": "node"
 }

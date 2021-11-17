@@ -1,6 +1,10 @@
 {
   "scripts": {
-    "build": "webpack"
+    "build": "webpack --mode=production --node-env=production",
+    "build:dev": "webpack --mode=development",
+    "build:prod": "webpack --mode=production --node-env=production",
+    "watch": "webpack --watch",
+    "serve": "webpack serve"
   },
   "dependencies": {
     "@types/node": "^16.11.7",
@@ -8,6 +12,8 @@
     "clean-webpack-plugin": "^4.0.0",
     "copy-webpack-plugin": "^9.1.0",
     "declaration-bundler-webpack-plugin": "^1.0.3",
+    "firebase": "^9.4.1",
+    "firebaseui": "^6.0.0",
     "ts-loader": "^9.2.6",
     "typescript": "^4.4.4",
     "webpack": "^5.64.1",
@@ -26,12 +32,5 @@
   },
   "version": "1.0.0",
   "description": "My webpack project",
-  "name": "my-webpack-project",
-  "scripts": {
-    "build": "webpack --mode=production --node-env=production",
-    "build:dev": "webpack --mode=development",
-    "build:prod": "webpack --mode=production --node-env=production",
-    "watch": "webpack --watch",
-    "serve": "webpack serve"
-  }
+  "name": "my-webpack-project"
 }
