@@ -1,6 +1,5 @@
 import { logApp, signIn, signOut } from "./auth";
 import { initRenderer } from "./renderer";
-import { startEditing } from "./editor";
 
 initRenderer();
 

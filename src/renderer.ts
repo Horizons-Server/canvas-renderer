@@ -10,31 +10,41 @@ import {
 } from "./config";
 import { getFirestore, collection, onSnapshot } from "firebase/firestore";
 
-//globals
-const db = getFirestore();
-let lines: Lines = {};
-let polygons: Polygons = {};
-let joints: Joints = {};
-let types: VisualTypes = {};
+// globals
+// canvas and ctx
 const canvas = document.querySelector("canvas");
 if (!canvas) throw new Error("Canvas not Found");
 const ctx = canvas.getContext("2d");
 if (!ctx) throw new Error("Could not create context");
+
+// data
+let lines: Lines = {};
+let polygons: Polygons = {};
+let joints: Joints = {};
+let types: VisualTypes = {};
+
+// consts
+const db = getFirestore();
 canvas.width = innerWidth;
 canvas.height = innerHeight;
-let canvasOffsetX = 0;
-let canvasOffsetY = 0;
+
+// lets
+
 let fontSize = 15;
+let textAreas: DOMRect[] = [];
+let editing = false;
 let mouse = {
   x: 0,
   y: 0,
+  rx: 0,
+  ry: 0,
   offsetX: 0,
   offsetY: 0,
+  button: 0,
+  bounds: canvas.getBoundingClientRect(),
 };
-let isDragging = false;
-let textAreas: DOMRect[] = [];
-let editing = false;
 
+//timings
 let verbose = false;
 let firstTime = {};
 let perfTotal = {};
@@ -42,6 +52,131 @@ let perfCount = {};
 let perfAvgs = {};
 let perfMax = {};
 let perfMin = {};
+let timingsInterval: any;
+
+addEventListener(
+  "resize",
+  () => {
+    canvas.style.width = innerWidth + "px";
+    canvas.style.height = innerHeight + "px";
+
+    retinaFix();
+  },
+  { passive: true }
+);
+addEventListener("wheel", trackWheel, { passive: false });
+addEventListener("mousemove", move);
+addEventListener("mousedown", move);
+addEventListener("mouseup", move);
+addEventListener("mouseout", move); // to stop mouse button locking up
+
+// lazy programmers globals
+var scale = 1;
+var wx = 0; // world zoom origin
+var wy = 0;
+var sx = 0; // mouse screen pos
+var sy = 0;
+
+function zoomed(number) {
+  if (typeof number != "number") {
+    return number;
+  }
+
+  // just scale
+  return number * scale;
+  // return Math.floor(number * scale);
+}
+// converts from world coord to screen pixel coord
+function zoomedX(number) {
+  // scale & origin X
+  return (number - wx) * scale + sx;
+  // return Math.floor((number - wx) * scale + sx);
+}
+
+function zoomedZ(number) {
+  // scale & origin Y
+  return (number - wy) * scale + sy;
+  // return Math.floor((number - wy) * scale + sy);
+}
+
+// Inverse does the reverse of a calculation. Like (3 - 1) * 5 = 10   the inverse is 10 * (1/5) + 1 = 3
+// multiply become 1 over ie *5 becomes * 1/5  (or just /5)
+// Adds become subtracts and subtract become add.
+// and what is first become last and the other way round.
+
+// inverse function converts from screen pixel coord to world coord
+function zoomed_INV(number) {
+  if (typeof number != "number") {
+    return number;
+  }
+
+  // just scale
+  // return Math.floor(number / scale);
+  return number / scale;
+}
+
+function zoomedX_INV(number) {
+  // scale & origin INV
+  return (number - sx) * (1 / scale) + wx;
+  // return Math.floor((number - sx) * (1 / scale) + wx);
+
+  // or return Math.floor((number - sx) / scale + wx);
+}
+
+function zoomedZ_INV(number) {
+  // scale & origin INV
+  return (number - sy) * (1 / scale) + wy;
+  // return Math.floor((number - sy) * (1 / scale) + wy);
+
+  // or return Math.floor((number - sy) / scale + wy);
+}
+
+function move(e: MouseEvent) {
+  // mouse move event
+  if (e.type === "mousedown") {
+    mouse.button = 1;
+  } else if (e.type === "mouseup" || e.type === "mouseout") {
+    mouse.button = 0;
+  }
+
+  mouse.bounds = canvas.getBoundingClientRect();
+  mouse.x = e.clientX - mouse.bounds.left;
+  mouse.y = e.clientY - mouse.bounds.top;
+  var xx = mouse.rx; // get last real world pos of mouse
+  var yy = mouse.ry;
+
+  mouse.rx = zoomedX_INV(mouse.x); // get the mouse real world pos via inverse scale and translate
+  mouse.ry = zoomedZ_INV(mouse.y);
+  if (mouse.button === 1) {
+    // is mouse button down
+    wx -= mouse.rx - xx; // move the world origin by the distance
+    // moved in world coords
+    wy -= mouse.ry - yy;
+    // recaculate mouse world
+    mouse.rx = zoomedX_INV(mouse.x);
+    mouse.ry = zoomedZ_INV(mouse.y);
+    requestAnimationFrame(animate);
+  }
+}
+
+function trackWheel(e) {
+  if (e.deltaY < 0) {
+    scale = Math.min(100, scale * 1.1); // zoom in
+  } else {
+    scale = Math.max(0.01, scale * (1 / 1.1)); // zoom out is inverse of zoom in
+  }
+
+  wx = mouse.rx; // set world origin
+  wy = mouse.ry;
+  sx = mouse.x; // set screen origin
+  sy = mouse.y;
+  mouse.rx = zoomedX_INV(mouse.x); // recalc mouse world (real) pos
+  mouse.ry = zoomedZ_INV(mouse.y);
+
+  e.preventDefault(); // stop the page scrolling
+
+  requestAnimationFrame(animate);
+}
 
 function timings(identifier: string) {
   if (perfCount[identifier] == undefined) {
@@ -123,46 +258,6 @@ function retinaFix() {
   requestAnimationFrame(animate);
 }
 
-addEventListener(
-  "resize",
-  () => {
-    canvasOffsetX = 0;
-    canvasOffsetY = 0;
-
-    canvas.style.width = innerWidth + "px";
-    canvas.style.height = innerHeight + "px";
-
-    retinaFix();
-  },
-  { passive: true }
-);
-
-addEventListener("mousemove", function (e) {
-  // if (editing) {
-  //   if (editorProcessMouse(e.clientX, e.clientY) == false) return;
-  // }
-
-  if (isDragging) {
-    mouse.offsetY += e.clientY - mouse.y;
-    mouse.offsetX += e.clientX - mouse.x;
-    mouse.y = e.clientY;
-    mouse.x = e.clientX;
-
-    requestAnimationFrame(animate);
-  }
-});
-
-addEventListener("mousedown", function (e) {
-  isDragging = true;
-
-  mouse.x = e.clientX;
-  mouse.y = e.clientY;
-});
-
-addEventListener("mouseup", function () {
-  isDragging = false;
-});
-
 /**
  * animate - draws a new frame
  */
@@ -173,26 +268,19 @@ function animate() {
 
   timings("clearRect");
 
-  ctx.fillStyle = "whitesmoke";
-  ctx.fillRect(
-    -canvasOffsetX + 10,
-    -canvasOffsetY + 10,
-    innerWidth - 20,
-    innerHeight - 20
-  );
-  textAreas = [];
-  timings("clearRect");
+  // ctx.fillStyle = "#" + Math.floor(Math.random() * 16777215).toString(16);
+  ctx.fillStyle = "#ccc";
+  ctx.fillRect(0, 0, innerWidth, innerHeight);
 
-  timings("offset");
-  //handle offset
-  if (isDragging) {
-    ctx.translate(mouse.offsetX, mouse.offsetY);
-    canvasOffsetX += mouse.offsetX;
-    canvasOffsetY += mouse.offsetY;
-  }
-  mouse.offsetX = 0;
-  mouse.offsetY = 0;
-  timings("offset");
+  ctx.fillStyle = "whitesmoke";
+  ctx.fillRect(50, 50, innerWidth - 100, innerHeight - 100);
+
+  ctx.fillStyle = "white";
+  ctx.fillRect(100, 100, innerWidth - 200, innerHeight - 200);
+
+  textAreas = [];
+
+  timings("clearRect");
 
   //handle drawing
   timings("drawPolygons");
@@ -226,9 +314,35 @@ function setProperties(properties: { [key: string]: any }) {
     ) {
       ctx[property](...properties[property]); //handle function props
     } else {
-      ctx[property] = properties[property]; //handle normal props
+      ctx[property] = zoomed(properties[property]); //handle normal props
     }
   });
+}
+
+//uses world coords
+function isOnScreen(box: DOMRect) {
+  if (
+    zoomedX(box.right) < 100 ||
+    zoomedX(box.left) > innerWidth - 100 ||
+    zoomedZ(box.bottom) < 100 ||
+    zoomedZ(box.top) > innerHeight - 100
+  ) {
+    return false;
+  }
+  return true;
+}
+
+//uses screen coords
+function isOnScreen_INV(box: DOMRect) {
+  if (
+    box.right < 100 ||
+    box.left > innerWidth - 100 ||
+    box.bottom < 100 ||
+    box.top > innerHeight - 100
+  ) {
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -240,14 +354,43 @@ function drawPolygons() {
   for (let polygonId in polygons) {
     let polygon = polygons[polygonId];
 
+    let top = Infinity;
+    let bottom = -Infinity;
+    let left = Infinity;
+    let right = -Infinity;
+
+    polygon.joints.forEach((jointId) => {
+      let joint = joints[jointId];
+      top = Math.min(top, joint.z);
+      bottom = Math.max(bottom, joint.z);
+      left = Math.min(left, joint.x);
+      right = Math.max(right, joint.x);
+    });
+
+    console.log(left, top, right, bottom);
+
+    let padding = 50;
+
+    if (
+      !isOnScreen(
+        new DOMRect(
+          left - padding,
+          top - padding,
+          right - left + padding * 2,
+          bottom - top + padding * 2
+        )
+      )
+    ) {
+      continue;
+    }
     //draw shape
     ctx.beginPath();
     polygon.joints.forEach((joint, i) => {
       let currentJoint = joints[joint];
       if (i == 0) {
-        ctx.moveTo(currentJoint.x, currentJoint.z);
+        ctx.moveTo(zoomedX(currentJoint.x), zoomedZ(currentJoint.z));
       } else {
-        ctx.lineTo(currentJoint.x, currentJoint.z);
+        ctx.lineTo(zoomedX(currentJoint.x), zoomedZ(currentJoint.z));
       }
     });
     ctx.closePath();
@@ -298,15 +441,43 @@ function drawLines() {
     for (let lineId in lines) {
       let line = lines[lineId];
 
+      let top = Infinity;
+      let bottom = -Infinity;
+      let left = Infinity;
+      let right = -Infinity;
+
+      line.joints.forEach((jointId) => {
+        let joint = joints[jointId];
+        top = Math.min(top, joint.z);
+        bottom = Math.max(bottom, joint.z);
+        left = Math.min(left, joint.x);
+        right = Math.max(right, joint.x);
+      });
+
+      let padding = 50;
+
+      if (
+        !isOnScreen(
+          new DOMRect(
+            left - padding,
+            top - padding,
+            right - left + padding * 2,
+            bottom - top + padding * 2
+          )
+        )
+      ) {
+        continue;
+      }
+
       //draw line
       ctx.beginPath();
       line.joints.forEach((joint, i) => {
         let currentJoint = joints[joint];
 
         if (i == 0) {
-          ctx.moveTo(currentJoint.x, currentJoint.z);
+          ctx.moveTo(zoomedX(currentJoint.x), zoomedZ(currentJoint.z));
         } else {
-          ctx.lineTo(currentJoint.x, currentJoint.z);
+          ctx.lineTo(zoomedX(currentJoint.x), zoomedZ(currentJoint.z));
         }
       });
 
@@ -332,9 +503,10 @@ function drawLines() {
         setProperties(appearance.functions[indexToPaint]);
 
         if (line.width)
-          ctx.lineWidth =
+          ctx.lineWidth = zoomed(
             line.width +
-            (parseInt(appearance.properties[indexToPaint]?.lineWidth) ?? 0);
+              (parseInt(appearance.properties[indexToPaint]?.lineWidth) ?? 0)
+          );
 
         ctx.stroke();
 
@@ -347,7 +519,7 @@ function drawLines() {
 }
 
 /**
- * applyRotationToBox - calculate the area and position of a
+ * applyRotationToText - calculate the area and position of a
  * bit of text's bounding box
  *
  * @param text the text in the box
@@ -356,7 +528,7 @@ function drawLines() {
  * @param rotation how far to rotate the box in radians
  * @return rect approximately surrounding the rotated text
  */
-function applyRotationToBox(
+function applyRotationToText(
   text: string,
   x: number,
   z: number,
@@ -366,20 +538,20 @@ function applyRotationToBox(
 
   let textWidth = ctx.measureText(text).width;
 
-  // "magic formula"
-  // uses ratios to approximate the size of the bounding box
-  let halfHeight =
-    fontSize / 2 + (rotation / (Math.PI / 2)) * (textWidth / 2 - fontSize / 2);
-  let halfWidth =
-    fontSize / 2 +
-    ((Math.PI / 2 - rotation) / (Math.PI / 2)) * (textWidth / 2 - fontSize / 2);
+  //get top right corner
+  let px = textWidth / 2;
+  let py = fontSize / 2;
 
-  //convert to DOMRect
+  //rotate it
+  let rx = px * Math.cos(rotation) - py * Math.sin(rotation);
+  let ry = py * Math.cos(rotation) - px * Math.sin(rotation);
+
+  // that's all we need, now calculate the bounding box
   return new DOMRect(
-    x - halfWidth,
-    z - halfHeight,
-    halfWidth * 2,
-    halfHeight * 2
+    x - rx,
+    z - Math.abs(ry),
+    Math.abs(2 * rx),
+    Math.abs(2 * ry)
   );
 }
 
@@ -387,21 +559,13 @@ function applyRotationToBox(
  * checkTextOverlap - approximate whether a bit of text would overlap with
  * some other text
  *
- * @param  text     the bit of text in the box
- * @param  x position of the center of the box
- * @param  z position of the center of the box
- * @param  rotation rotation in radians
+ * @param  box bounding box of text
  * @return true if text overlaps
  */
-function checkTextOverlap(
-  text: string,
-  x: number,
-  z: number,
-  rotation: number
-) {
+function checkTextOverlap(box: DOMRect) {
   for (let i = 0; i < textAreas.length; i++) {
     let a = textAreas[i];
-    let b = applyRotationToBox(text, x, z, rotation);
+    let b = box;
 
     if (
       b != undefined &&
@@ -414,44 +578,6 @@ function checkTextOverlap(
     }
   }
   return false;
-}
-
-/**
- * fillText - description
- *
- * @param  text text to draw
- * @param  x position of the center of the box
- * @param  z position of the center of the box
- * @param  rotation rotation in radians
- * @return false if draw failed
- */
-function fillText(text: string, x: number, z: number, rotation: number) {
-  if (!ctx || !canvas) return false;
-
-  if (checkTextOverlap(text, x, z, rotation)) return false;
-
-  //save text box to check overlap
-  let newRect = applyRotationToBox(text, x, z, rotation);
-  if (newRect) textAreas.push(newRect);
-
-  ctx.save();
-
-  ctx.translate(x, z); //translate to center of shape
-  //  ctx.rotate((Math.PI / 180) * rotation); //rotate in degrees.
-  ctx.rotate(rotation); //rotate in radians
-  ctx.translate(-x, -z); //translate center back to 0,0
-
-  ctx.textBaseline = "middle";
-  ctx.fillStyle = "#000";
-  ctx.strokeStyle = "#eee";
-  ctx.textAlign = "center";
-
-  ctx.strokeText(text, x, z);
-  ctx.fillText(text, x, z);
-
-  ctx.restore();
-
-  return true;
 }
 
 /**
@@ -472,6 +598,51 @@ function getTextAngle(jointA: Joint, jointB: Joint) {
   let dz = jointB.z - jointA.z;
 
   return Math.atan2(dz, dx);
+}
+
+/**
+ * fillText - description
+ *
+ * @param  text text to draw
+ * @param  x position of the center of the box
+ * @param  z position of the center of the box
+ * @param  rotation rotation in radians
+ * @return false if draw failed
+ */
+function fillText(text: string, x: number, z: number, rotation: number) {
+  if (!ctx || !canvas) return false;
+
+  x = zoomedX(x);
+  z = zoomedZ(z);
+
+  let newRect = applyRotationToText(text, x, z, rotation);
+
+  if (!isOnScreen_INV(newRect)) {
+    return false;
+  }
+  if (checkTextOverlap(newRect)) return false;
+
+  //save text box to check overlap
+  if (newRect) textAreas.push(newRect);
+
+  ctx.save();
+
+  ctx.translate(x, z); //translate to center of shape
+  //  ctx.rotate((Math.PI / 180) * rotation); //rotate in degrees.
+  ctx.rotate(rotation); //rotate in radians
+  ctx.translate(-x, -z); //translate center back to 0,0
+
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#000";
+  ctx.strokeStyle = "#eee";
+  ctx.textAlign = "center";
+
+  ctx.strokeText(text, x, z);
+  ctx.fillText(text, x, z);
+
+  ctx.restore();
+
+  return true;
 }
 
 /**
@@ -538,8 +709,9 @@ function renderAllText() {
     });
 
     if (
+      isOnScreen(new DOMRect(left, top, right - left, bottom - top)) &&
       bottom - top > fontSize &&
-      right - left > ctx.measureText(polygon.name).width
+      right - left > zoomed_INV(ctx.measureText(polygon.name).width)
     )
       fillText(polygon.name, sumX / count, sumY / count, 0);
   }
@@ -549,12 +721,8 @@ function renderAllText() {
     let line = lines[lineId];
 
     if (line.name == undefined) return;
-
-    let textWidth = ctx.measureText(line.name).width;
-    let textSpace = textWidth * 2;
     let totalDistances = [0];
     let totalDistance = 0;
-
     //calculate the length of the line
     line.joints.forEach((joint, i) => {
       if (i != 0) {
@@ -568,7 +736,10 @@ function renderAllText() {
       }
     });
 
-    let remainder = textSpace % totalDistance;
+    let textWidth = zoomed_INV(ctx.measureText(line.name).width);
+    let textSpace = textWidth * 3;
+
+    let remainder = totalDistance % textSpace;
 
     //calculate positions of texts and draw them
     for (let i = 0; i <= totalDistance / textSpace; i++) {
@@ -598,7 +769,7 @@ function renderAllText() {
         }
       }
 
-      if (trailingJointIndex == 0) return;
+      if (trailingJointIndex == 0) continue;
 
       let currentJoint = joints[line.joints[trailingJointIndex]];
       let prevJoint = joints[line.joints[trailingJointIndex - 1]];
@@ -611,6 +782,20 @@ function renderAllText() {
       fillText(line.name, textPosition.x, textPosition.z, angle);
     }
   }
+}
+
+/**
+ * setDefaultStyles - load default styles into ctx
+ */
+function setDefaultStyles() {
+  if (ctx) ctx.font = `${fontSize}px arial`;
+}
+
+export function initRenderer() {
+  loadFirestore();
+  retinaFix();
+  setDefaultStyles();
+  startEditing();
 }
 
 function loadFirestore() {
@@ -651,20 +836,6 @@ function loadFirestore() {
   });
 }
 
-/**
- * setDefaultStyles - load default styles into ctx
- */
-function setDefaultStyles() {
-  if (ctx) ctx.font = `${fontSize}px arial`;
-}
-
-export function initRenderer() {
-  loadFirestore();
-  retinaFix();
-  setDefaultStyles();
-  startEditing();
-}
-
 export function startEditing() {
   editing = true;
 }
@@ -674,8 +845,6 @@ function distanceToJointSquared(joint: Joint, x: number, z: number) {
 }
 
 function editorProcessMouse(x: number, z: number) {
-  console.log(x, z);
-
   let closestJointId = undefined;
   let closestJoint = undefined;
   let closestDistance = Infinity;
@@ -694,7 +863,7 @@ function editorProcessMouse(x: number, z: number) {
     canvas.style.cursor = "unset";
     return true;
   } else {
-    if (isDragging) {
+    if (mouse.button == 1) {
       canvas.style.cursor = "grabbing";
       return false;
     } else {
