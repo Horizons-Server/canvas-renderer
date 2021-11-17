@@ -986,7 +986,7 @@ export function finishAdding() {
 
 function startSave() {
   clearTimeout(saveTimeout);
-  saveTimeout = setTimeout(saveChanges, 5000);
+  saveTimeout = setTimeout(saveChanges, 1000);
   document.getElementById("saveState").textContent = "Saving";
   document.getElementById("saveState").classList.add("saving");
 }
