@@ -2,7 +2,12 @@
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { getAuth, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
-import { getFirestore, getDocs, collection } from "firebase/firestore";
+import {
+  getFirestore,
+  getDocs,
+  collection,
+  onSnapshot,
+} from "firebase/firestore";
 
 // TODO: Add SDKs for Firebase products that you want to use
 // https://firebase.google.com/docs/web/setup#available-libraries
@@ -31,9 +36,13 @@ auth.onAuthStateChanged((user) => {
     // User logged in already or has just logged in.
     console.log("LOGGED IN");
     console.log(user);
+    document.getElementById("signIn").style.display = "none";
+    document.getElementById("signOut").style.display = "block";
   } else {
     // User not logged in or has just logged out.
     console.log("NOT LOGGED IN");
+    document.getElementById("signIn").style.display = "block";
+    document.getElementById("signOut").style.display = "none";
   }
 });
 
@@ -41,10 +50,10 @@ export async function logApp() {
   console.log(app);
   console.log(db);
 
-  const querySnapshot = await getDocs(collection(db, "joints"));
-  querySnapshot.forEach((doc) => {
-    console.log(`${doc.id} => ${JSON.stringify(doc.data())}`);
-  });
+  // const querySnapshot = await getDocs(collection(db, "joints"));
+  // querySnapshot.forEach((doc) => {
+  //   console.log(`${doc.id} => ${JSON.stringify(doc.data())}`);
+  // });
 }
 
 export function signIn() {
@@ -77,7 +86,13 @@ export function signOut() {
 type provisionType = "joint" | "line" | "polygon" | "type";
 
 export function provisionNewDocument(typeToProvision: provisionType) {}
-export function updateDocument() {}
-export function deleteDocument() {}
+export function updateDocument(idToUpdate: string, content: any) {}
+export function deleteDocument(idToDelete) {}
 
 export function commitChanges() {}
+
+onSnapshot(collection(db, "joints"), (res) => {
+  res.forEach((doc) => {
+    console.log(`${doc.id} => ${JSON.stringify(doc.data())}`);
+  });
+});

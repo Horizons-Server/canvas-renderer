@@ -11,13 +11,22 @@
 
       canvas {
         position: fixed;
+        top: 0;
+        left: 0;
         width: 100%;
         height: 100%;
+        z-index: 1;
+      }
+      button {
+        position: relative;
+        z-index: 10;
+        display: none;
       }
     </style>
   </head>
   <body>
     <canvas></canvas>
     <button id="signIn">SIGN IN</button>
+    <button id="signOut">SIGN OUT</button>
   </body>
 </html>

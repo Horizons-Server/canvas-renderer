@@ -1,43 +1,43 @@
 {
-  "polygons": [
-    {
+  "polygons": {
+    "h": {
       "id": "h",
       "type": "building",
       "name": "Example Building",
       "description": "Example Building",
       "joints": ["a", "b", "c", "d"]
     },
-    {
+    "i": {
       "id": "l",
       "type": "park",
       "name": "Example Park",
       "width": 10,
       "joints": ["e", "f", "g"]
     }
-  ],
-  "lines": [
-    {
+  },
+  "lines": {
+    "j": {
       "id": "j",
       "type": "road",
       "name": "Second Road",
       "width": 10,
       "joints": ["e", "c"]
     },
-    {
+    "i": {
       "id": "i",
       "type": "road",
       "name": "First Road",
       "width": 10,
       "joints": ["e", "f", "g"]
     },
-    {
+    "j": {
       "id": "j",
       "type": "rail",
       "name": "Railway",
       "width": 10,
       "joints": ["e", "d"]
     }
-  ],
+  },
   "joints": {
     "a": {
       "id": "a",

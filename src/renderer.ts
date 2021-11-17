@@ -5,13 +5,17 @@ import {
   Polygons,
   Line,
   Lines,
-  config,
+  VisualType,
+  VisualTypes,
 } from "./config";
+import { getFirestore, collection, onSnapshot } from "firebase/firestore";
 
 //globals
-let lines: Lines = [];
-let polygons: Polygons = [];
+const db = getFirestore();
+let lines: Lines = {};
+let polygons: Polygons = {};
 let joints: Joints = {};
+let types: VisualTypes = {};
 const canvas = document.querySelector("canvas");
 if (!canvas) throw new Error("Canvas not Found");
 const ctx = canvas.getContext("2d");
@@ -29,6 +33,7 @@ let mouse = {
 };
 let isDragging = false;
 let textAreas: DOMRect[] = [];
+let editing = false;
 
 let verbose = false;
 let firstTime = {};
@@ -133,6 +138,10 @@ addEventListener(
 );
 
 addEventListener("mousemove", function (e) {
+  // if (editing) {
+  //   if (editorProcessMouse(e.clientX, e.clientY) == false) return;
+  // }
+
   if (isDragging) {
     mouse.offsetY += e.clientY - mouse.y;
     mouse.offsetX += e.clientX - mouse.x;
@@ -146,10 +155,8 @@ addEventListener("mousemove", function (e) {
 addEventListener("mousedown", function (e) {
   isDragging = true;
 
-  {
-    mouse.x = e.clientX;
-    mouse.y = e.clientY;
-  }
+  mouse.x = e.clientX;
+  mouse.y = e.clientY;
 });
 
 addEventListener("mouseup", function () {
@@ -209,7 +216,7 @@ function animate() {
  * @param  properties properties in an object
  */
 function setProperties(properties: { [key: string]: any }) {
-  if (!ctx) return;
+  if (!ctx || properties == undefined) return;
 
   let propertiesToChange = Object.keys(properties);
   propertiesToChange.forEach((property) => {
@@ -230,7 +237,9 @@ function setProperties(properties: { [key: string]: any }) {
 function drawPolygons() {
   if (!ctx || !canvas) return;
 
-  polygons.forEach((polygon) => {
+  for (let polygonId in polygons) {
+    let polygon = polygons[polygonId];
+
     //draw shape
     ctx.beginPath();
     polygon.joints.forEach((joint, i) => {
@@ -244,26 +253,34 @@ function drawPolygons() {
     ctx.closePath();
 
     //get type from config
-    let typeList = config.polygonTypes[polygon.type]?.appearance?.light;
-    if (typeList == undefined) return;
+    let appearanceList = types[polygon.type]?.appearances;
+    if (appearanceList == undefined) return;
 
     //paint type to canvas
-    typeList.forEach((type: any) => {
-      ctx.save();
+    appearanceList.forEach((appearance) => {
+      // TODO check dark mode
+      // TODO check zoom
 
-      setProperties(type);
+      let numLayers = Math.max(
+        appearance.properties.length,
+        appearance.functions.length
+      );
 
-      if (polygon.colorOverride != undefined)
-        ctx.fillStyle = polygon.colorOverride;
-      if (polygon.strokeOverride != undefined)
-        ctx.strokeStyle = polygon.strokeOverride;
+      for (let i = 0; i < numLayers; i++) {
+        ctx.save();
 
-      ctx.fill();
-      ctx.stroke();
+        setProperties(appearance.properties[i]);
+        setProperties(appearance.functions[i]);
 
-      ctx.restore();
+        // TODO function ovverrides
+
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.restore();
+      }
     });
-  });
+  }
 }
 
 /**
@@ -278,7 +295,9 @@ function drawLines() {
   while (paintingLines) {
     paintingLines = false;
 
-    lines.forEach((line) => {
+    for (let lineId in lines) {
+      let line = lines[lineId];
+
       //draw line
       ctx.beginPath();
       line.joints.forEach((joint, i) => {
@@ -292,27 +311,36 @@ function drawLines() {
       });
 
       //get type from config
-      let typeList = config.lineTypes[line.type]?.appearance?.light;
-      if (typeList == undefined) return;
+      let appearanceList = types[line.type]?.appearances;
+      if (appearanceList == undefined) return;
 
-      let type = typeList[indexToPaint];
+      appearanceList.forEach((appearance) => {
+        // TODO check dark mode
+        // TODO check zoom
 
-      if (!type) return;
+        //paint type to canvas
 
-      //paint type to canvas
-      paintingLines = true;
+        if (
+          appearance.properties[indexToPaint] != undefined &&
+          appearance.functions[indexToPaint] != undefined
+        )
+          paintingLines = true;
 
-      ctx.save();
+        ctx.save();
 
-      setProperties(type);
+        setProperties(appearance.properties[indexToPaint]);
+        setProperties(appearance.functions[indexToPaint]);
 
-      if (line.width)
-        ctx.lineWidth = line.width + (parseInt(type.lineWidth) ?? 0);
+        if (line.width)
+          ctx.lineWidth =
+            line.width +
+            (parseInt(appearance.properties[indexToPaint]?.lineWidth) ?? 0);
 
-      ctx.stroke();
+        ctx.stroke();
 
-      ctx.restore();
-    });
+        ctx.restore();
+      });
+    }
 
     indexToPaint++;
   }
@@ -322,7 +350,7 @@ function drawLines() {
  * applyRotationToBox - calculate the area and position of a
  * bit of text's bounding box
  *
- * @param texet the text in the box
+ * @param text the text in the box
  * @param x the x position of the center of the box
  * @param x the z position of the center of the box
  * @param rotation how far to rotate the box in radians
@@ -486,8 +514,8 @@ function renderAllText() {
   if (!ctx || !canvas) return;
 
   // draw polygons first
-  polygons.forEach((polygon) => {
-    //find the bounding box of the polygon
+  for (let polygonId in polygons) {
+    let polygon = polygons[polygonId]; //find the bounding box of the polygon
     if (polygon.name == undefined) return;
     let sumX = 0;
     let sumY = 0;
@@ -514,10 +542,12 @@ function renderAllText() {
       right - left > ctx.measureText(polygon.name).width
     )
       fillText(polygon.name, sumX / count, sumY / count, 0);
-  });
+  }
 
   //draw line texts
-  lines.forEach((line) => {
+  for (let lineId in lines) {
+    let line = lines[lineId];
+
     if (line.name == undefined) return;
 
     let textWidth = ctx.measureText(line.name).width;
@@ -580,23 +610,44 @@ function renderAllText() {
 
       fillText(line.name, textPosition.x, textPosition.z, angle);
     }
-  });
+  }
 }
 
-/**
- * loadJson - load all data files
- */
-function loadJson() {
-  config.dataFiles.forEach((fileName) => {
-    fetch("../data/" + fileName).then((res) => {
-      res.json().then((json) => {
-        polygons.push(...json.polygons);
-        lines.push(...json.lines);
-        joints = Object.assign(joints, json.joints);
+function loadFirestore() {
+  onSnapshot(collection(db, "joints"), (res) => {
+    res.forEach((doc) => {
+      console.log("JOINT", doc.id, doc.data());
 
-        requestAnimationFrame(animate);
-      });
+      joints[doc.id] = doc.data() as Joint;
     });
+    requestAnimationFrame(animate);
+  });
+
+  onSnapshot(collection(db, "lines"), (res) => {
+    res.forEach((doc) => {
+      console.log("LINE", doc.id, doc.data());
+
+      lines[doc.id] = doc.data() as Line;
+    });
+    requestAnimationFrame(animate);
+  });
+
+  onSnapshot(collection(db, "polygons"), (res) => {
+    res.forEach((doc) => {
+      console.log("POLYGON", doc.id, doc.data());
+
+      polygons[doc.id] = doc.data() as Polygon;
+    });
+    requestAnimationFrame(animate);
+  });
+
+  onSnapshot(collection(db, "types"), (res) => {
+    res.forEach((doc) => {
+      console.log("TYPE", doc.id, doc.data());
+
+      types[doc.id] = doc.data() as VisualType;
+    });
+    requestAnimationFrame(animate);
   });
 }
 
@@ -604,12 +655,52 @@ function loadJson() {
  * setDefaultStyles - load default styles into ctx
  */
 function setDefaultStyles() {
-  setProperties(config.defaultStyles);
   if (ctx) ctx.font = `${fontSize}px arial`;
 }
 
 export function initRenderer() {
-  loadJson();
+  loadFirestore();
   retinaFix();
   setDefaultStyles();
+  startEditing();
+}
+
+export function startEditing() {
+  editing = true;
+}
+
+function distanceToJointSquared(joint: Joint, x: number, z: number) {
+  return Math.abs((joint.x - x) ** 2 + (joint.z - z) ** 2);
+}
+
+function editorProcessMouse(x: number, z: number) {
+  console.log(x, z);
+
+  let closestJointId = undefined;
+  let closestJoint = undefined;
+  let closestDistance = Infinity;
+
+  for (let jointId in joints) {
+    let joint = joints[jointId];
+    let distance = distanceToJointSquared(joint, x, z);
+    if (distance < 50 ** 2 && distance < closestDistance) {
+      closestJointId = jointId;
+      closestJoint = joint;
+      closestDistance = distance;
+    }
+  }
+
+  if (closestJointId == undefined) {
+    canvas.style.cursor = "unset";
+    return true;
+  } else {
+    if (isDragging) {
+      canvas.style.cursor = "grabbing";
+      return false;
+    } else {
+      canvas.style.cursor = "grab";
+    }
+  }
+
+  return true;
 }
