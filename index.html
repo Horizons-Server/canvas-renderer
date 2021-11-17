@@ -7,6 +7,7 @@
       html,
       body {
         margin: 0;
+        height: 100%;
       }
 
       canvas {
@@ -17,16 +18,43 @@
         height: 100%;
         z-index: 1;
       }
-      button {
+      .topBar {
         position: relative;
         z-index: 10;
+      }
+
+      .bottomBar {
+        position: fixed;
+        bottom: 0;
+        z-index: 10;
+      }
+
+      .saving {
+        color: red;
+      }
+
+      #signIn,
+      #signOut {
         display: none;
       }
     </style>
   </head>
   <body>
-    <canvas></canvas>
-    <button id="signIn">SIGN IN</button>
-    <button id="signOut">SIGN OUT</button>
+    <canvas id="dynmapCanvas"></canvas>
+    <canvas id="mainCanvas"></canvas>
+    <div class="topBar">
+      <button id="signIn">SIGN IN</button>
+      <button id="signOut">SIGN OUT</button>
+      <div id="saveState"></div>
+    </div>
+    <div class="bottomBar">
+      <button id="doneAdding">DONE</button>
+      <button id="newLine">NEW LINE</button>
+      <button id="newPoly">NEW POLY</button>
+      <button id="newLine">EDIT LINE</button>
+      <button id="newPoly">EDIT POLY</button>
+      <button id="newLine">DELETE LINE</button>
+      <button id="newPoly">DELETE POLY</button>
+    </div>
   </body>
 </html>

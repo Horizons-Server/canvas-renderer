@@ -62,16 +62,6 @@ export interface Polygon {
   name?: string;
   description?: string;
   joints: string[]; //points of the polygon
-
-  /**
-   * @deprecated
-   */
-  colorOverride?: string; //override the fill color for a specific component
-
-  /**
-   * @deprecated
-   */
-  strokeOverride?: string; //override the stroke color for a specific component
   overrides: {
     functions: {
       [key: string]: string[];

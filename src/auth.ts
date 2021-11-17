@@ -83,14 +83,6 @@ export function signOut() {
   auth.signOut();
 }
 
-type provisionType = "joint" | "line" | "polygon" | "type";
-
-export function provisionNewDocument(typeToProvision: provisionType) {}
-export function updateDocument(idToUpdate: string, content: any) {}
-export function deleteDocument(idToDelete) {}
-
-export function commitChanges() {}
-
 onSnapshot(collection(db, "joints"), (res) => {
   res.forEach((doc) => {
     console.log(`${doc.id} => ${JSON.stringify(doc.data())}`);

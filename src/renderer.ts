@@ -8,11 +8,17 @@ import {
   VisualType,
   VisualTypes,
 } from "./config";
-import { getFirestore, collection, onSnapshot } from "firebase/firestore";
+import {
+  setDoc,
+  getFirestore,
+  collection,
+  onSnapshot,
+  doc,
+} from "firebase/firestore";
 
 // globals
 // canvas and ctx
-const canvas = document.querySelector("canvas");
+const canvas = document.querySelector("#mainCanvas") as HTMLCanvasElement;
 if (!canvas) throw new Error("Canvas not Found");
 const ctx = canvas.getContext("2d");
 if (!ctx) throw new Error("Could not create context");
@@ -22,6 +28,14 @@ let lines: Lines = {};
 let polygons: Polygons = {};
 let joints: Joints = {};
 let types: VisualTypes = {};
+let docsToSave: {
+  id: string;
+  collection: string;
+  source: any;
+}[] = [];
+let saveTimeout: any;
+let addingLine: string;
+let addingPoly: string;
 
 // consts
 const db = getFirestore();
@@ -29,7 +43,6 @@ canvas.width = innerWidth;
 canvas.height = innerHeight;
 
 // lets
-
 let fontSize = 15;
 let textAreas: DOMRect[] = [];
 let editing = false;
@@ -37,9 +50,7 @@ let mouse = {
   x: 0,
   y: 0,
   rx: 0,
-  ry: 0,
-  offsetX: 0,
-  offsetY: 0,
+  rz: 0,
   button: 0,
   bounds: canvas.getBoundingClientRect(),
 };
@@ -52,7 +63,6 @@ let perfCount = {};
 let perfAvgs = {};
 let perfMax = {};
 let perfMin = {};
-let timingsInterval: any;
 
 addEventListener(
   "resize",
@@ -69,6 +79,7 @@ addEventListener("mousemove", move);
 addEventListener("mousedown", move);
 addEventListener("mouseup", move);
 addEventListener("mouseout", move); // to stop mouse button locking up
+canvas.addEventListener("click", processEditorClick);
 
 // lazy programmers globals
 var scale = 1;
@@ -77,7 +88,7 @@ var wy = 0;
 var sx = 0; // mouse screen pos
 var sy = 0;
 
-function zoomed(number) {
+function zoomed(number: any) {
   if (typeof number != "number") {
     return number;
   }
@@ -87,25 +98,20 @@ function zoomed(number) {
   // return Math.floor(number * scale);
 }
 // converts from world coord to screen pixel coord
-function zoomedX(number) {
+function zoomedX(number: any) {
   // scale & origin X
   return (number - wx) * scale + sx;
   // return Math.floor((number - wx) * scale + sx);
 }
 
-function zoomedZ(number) {
+function zoomedZ(number: any) {
   // scale & origin Y
   return (number - wy) * scale + sy;
   // return Math.floor((number - wy) * scale + sy);
 }
 
-// Inverse does the reverse of a calculation. Like (3 - 1) * 5 = 10   the inverse is 10 * (1/5) + 1 = 3
-// multiply become 1 over ie *5 becomes * 1/5  (or just /5)
-// Adds become subtracts and subtract become add.
-// and what is first become last and the other way round.
-
 // inverse function converts from screen pixel coord to world coord
-function zoomed_INV(number) {
+function zoomed_INV(number: any) {
   if (typeof number != "number") {
     return number;
   }
@@ -115,7 +121,7 @@ function zoomed_INV(number) {
   return number / scale;
 }
 
-function zoomedX_INV(number) {
+function zoomedX_INV(number: any) {
   // scale & origin INV
   return (number - sx) * (1 / scale) + wx;
   // return Math.floor((number - sx) * (1 / scale) + wx);
@@ -123,7 +129,7 @@ function zoomedX_INV(number) {
   // or return Math.floor((number - sx) / scale + wx);
 }
 
-function zoomedZ_INV(number) {
+function zoomedZ_INV(number: any) {
   // scale & origin INV
   return (number - sy) * (1 / scale) + wy;
   // return Math.floor((number - sy) * (1 / scale) + wy);
@@ -143,20 +149,24 @@ function move(e: MouseEvent) {
   mouse.x = e.clientX - mouse.bounds.left;
   mouse.y = e.clientY - mouse.bounds.top;
   var xx = mouse.rx; // get last real world pos of mouse
-  var yy = mouse.ry;
+  var yy = mouse.rz;
 
   mouse.rx = zoomedX_INV(mouse.x); // get the mouse real world pos via inverse scale and translate
-  mouse.ry = zoomedZ_INV(mouse.y);
-  if (mouse.button === 1) {
-    // is mouse button down
-    wx -= mouse.rx - xx; // move the world origin by the distance
-    // moved in world coords
-    wy -= mouse.ry - yy;
-    // recaculate mouse world
-    mouse.rx = zoomedX_INV(mouse.x);
-    mouse.ry = zoomedZ_INV(mouse.y);
-    requestAnimationFrame(animate);
-  }
+  mouse.rz = zoomedZ_INV(mouse.y);
+
+  if (addingLine || addingPoly) requestAnimationFrame(animate);
+
+  if (editorProcessMouse())
+    if (mouse.button === 1) {
+      // is mouse button down
+      wx -= mouse.rx - xx; // move the world origin by the distance
+      // moved in world coords
+      wy -= mouse.rz - yy;
+      // recaculate mouse world
+      mouse.rx = zoomedX_INV(mouse.x);
+      mouse.rz = zoomedZ_INV(mouse.y);
+      requestAnimationFrame(animate);
+    }
 }
 
 function trackWheel(e) {
@@ -167,11 +177,11 @@ function trackWheel(e) {
   }
 
   wx = mouse.rx; // set world origin
-  wy = mouse.ry;
+  wy = mouse.rz;
   sx = mouse.x; // set screen origin
   sy = mouse.y;
   mouse.rx = zoomedX_INV(mouse.x); // recalc mouse world (real) pos
-  mouse.ry = zoomedZ_INV(mouse.y);
+  mouse.rz = zoomedZ_INV(mouse.y);
 
   e.preventDefault(); // stop the page scrolling
 
@@ -367,8 +377,6 @@ function drawPolygons() {
       right = Math.max(right, joint.x);
     });
 
-    console.log(left, top, right, bottom);
-
     let padding = 50;
 
     if (
@@ -480,6 +488,11 @@ function drawLines() {
           ctx.lineTo(zoomedX(currentJoint.x), zoomedZ(currentJoint.z));
         }
       });
+
+      if (addingLine == lineId) {
+        console.log(mouse.x, mouse.y);
+        ctx.lineTo(mouse.x, mouse.y);
+      }
 
       //get type from config
       let appearanceList = types[line.type]?.appearances;
@@ -751,12 +764,12 @@ function renderAllText() {
           let currentJoint = joints[line.joints[0]];
           let prevJoint = joints[line.joints[1]];
           let angle = getTextAngle(prevJoint, currentJoint);
-          let textPosition = pointAlongLine(
-            prevJoint,
-            currentJoint,
-            totalDistance / 2
+          fillText(
+            line.name,
+            (currentJoint.x + prevJoint.x) / 2,
+            (currentJoint.z + prevJoint.z) / 2,
+            angle
           );
-          fillText(line.name, textPosition.x, textPosition.z, angle);
         }
       }
 
@@ -844,14 +857,14 @@ function distanceToJointSquared(joint: Joint, x: number, z: number) {
   return Math.abs((joint.x - x) ** 2 + (joint.z - z) ** 2);
 }
 
-function editorProcessMouse(x: number, z: number) {
+function editorProcessMouse() {
   let closestJointId = undefined;
   let closestJoint = undefined;
   let closestDistance = Infinity;
 
   for (let jointId in joints) {
     let joint = joints[jointId];
-    let distance = distanceToJointSquared(joint, x, z);
+    let distance = distanceToJointSquared(joint, mouse.rx, mouse.rz);
     if (distance < 50 ** 2 && distance < closestDistance) {
       closestJointId = jointId;
       closestJoint = joint;
@@ -865,6 +878,23 @@ function editorProcessMouse(x: number, z: number) {
   } else {
     if (mouse.button == 1) {
       canvas.style.cursor = "grabbing";
+
+      joints[closestJointId].x = mouse.rx;
+      joints[closestJointId].z = mouse.rz;
+
+      if (docsToSave.filter((x) => x.id == closestJointId).length == 0)
+        docsToSave.push({
+          id: closestJointId,
+          collection: "joints",
+          source: joints,
+        });
+
+      requestAnimationFrame(animate);
+      clearTimeout(saveTimeout);
+      saveTimeout = setTimeout(saveChanges, 5000);
+      document.getElementById("saveState").textContent = "Saving";
+      document.getElementById("saveState").classList.add("saving");
+
       return false;
     } else {
       canvas.style.cursor = "grab";
@@ -872,4 +902,71 @@ function editorProcessMouse(x: number, z: number) {
   }
 
   return true;
+}
+
+async function processEditorClick() {
+  if (addingLine) {
+    let newJoint = doc(collection(db, "joints"));
+
+    docsToSave.push({
+      id: newJoint.id,
+      collection: "joints",
+      source: joints,
+    });
+
+    joints[newJoint.id] = {
+      x: mouse.rx,
+      z: mouse.rz,
+    };
+
+    lines[addingLine].joints.push(newJoint.id);
+  }
+
+  requestAnimationFrame(animate);
+}
+
+export function addLine() {
+  let newLine = doc(collection(db, "lines"));
+
+  docsToSave.push({
+    id: newLine.id,
+    collection: "lines",
+    source: lines,
+  });
+
+  lines[newLine.id] = {
+    type: lines[Object.keys(lines)[0]].type,
+    name: "New Line",
+    joints: [],
+  };
+
+  addingLine = newLine.id;
+
+  requestAnimationFrame(animate);
+}
+
+export function finishAdding() {
+  addingLine = undefined;
+  addingPoly = undefined;
+}
+
+function saveChanges() {
+  let waiting = 0;
+  docsToSave.forEach((set) => {
+    waiting++;
+    setDoc(doc(db, set.collection, set.id), set.source[set.id]).then((res) => {
+      waiting--;
+
+      if (waiting <= 0) {
+        document.getElementById("saveState").textContent = "Saved";
+        document.getElementById("saveState").classList.remove("saving");
+
+        saveTimeout = setTimeout(hideSaveState, 30 * 1000);
+      }
+    });
+  });
+}
+
+function hideSaveState() {
+  document.getElementById("saveState").textContent = "";
 }
