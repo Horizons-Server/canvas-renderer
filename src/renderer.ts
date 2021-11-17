@@ -279,14 +279,9 @@ function animate() {
   timings("clearRect");
 
   // ctx.fillStyle = "#" + Math.floor(Math.random() * 16777215).toString(16);
-  ctx.fillStyle = "#ccc";
-  ctx.fillRect(0, 0, innerWidth, innerHeight);
 
   ctx.fillStyle = "whitesmoke";
-  ctx.fillRect(50, 50, innerWidth - 100, innerHeight - 100);
-
-  ctx.fillStyle = "white";
-  ctx.fillRect(100, 100, innerWidth - 200, innerHeight - 200);
+  ctx.fillRect(0, 0, innerWidth, innerHeight);
 
   textAreas = [];
 
@@ -332,10 +327,10 @@ function setProperties(properties: { [key: string]: any }) {
 //uses world coords
 function isOnScreen(box: DOMRect) {
   if (
-    zoomedX(box.right) < 100 ||
-    zoomedX(box.left) > innerWidth - 100 ||
-    zoomedZ(box.bottom) < 100 ||
-    zoomedZ(box.top) > innerHeight - 100
+    zoomedX(box.right) < 0 ||
+    zoomedX(box.left) > innerWidth ||
+    zoomedZ(box.bottom) < 0 ||
+    zoomedZ(box.top) > innerHeight
   ) {
     return false;
   }
@@ -345,10 +340,10 @@ function isOnScreen(box: DOMRect) {
 //uses screen coords
 function isOnScreen_INV(box: DOMRect) {
   if (
-    box.right < 100 ||
-    box.left > innerWidth - 100 ||
-    box.bottom < 100 ||
-    box.top > innerHeight - 100
+    box.right < 0 ||
+    box.left > innerWidth ||
+    box.bottom < 0 ||
+    box.top > innerHeight
   ) {
     return false;
   }
@@ -893,10 +888,7 @@ function editorProcessMouse() {
         });
 
       requestAnimationFrame(animate);
-      clearTimeout(saveTimeout);
-      saveTimeout = setTimeout(saveChanges, 5000);
-      document.getElementById("saveState").textContent = "Saving";
-      document.getElementById("saveState").classList.add("saving");
+      startSave();
 
       return false;
     } else {
@@ -923,6 +915,7 @@ async function processEditorClick() {
     };
 
     lines[addingLine].joints.push(newJoint.id);
+    startSave();
   }
 
   if (addingPoly) {
@@ -940,6 +933,7 @@ async function processEditorClick() {
     };
 
     polygons[addingPoly].joints.push(newJoint.id);
+    startSave();
   }
 
   requestAnimationFrame(animate);
@@ -988,6 +982,13 @@ export function addPoly() {
 export function finishAdding() {
   addingLine = undefined;
   addingPoly = undefined;
+}
+
+function startSave() {
+  clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(saveChanges, 5000);
+  document.getElementById("saveState").textContent = "Saving";
+  document.getElementById("saveState").classList.add("saving");
 }
 
 function saveChanges() {
