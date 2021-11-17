@@ -62,7 +62,7 @@ export interface Polygon {
   name?: string;
   description?: string;
   joints: string[]; //points of the polygon
-  overrides: {
+  overrides?: {
     functions: {
       [key: string]: string[];
     };

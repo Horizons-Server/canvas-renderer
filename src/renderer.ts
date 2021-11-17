@@ -401,6 +401,9 @@ function drawPolygons() {
         ctx.lineTo(zoomedX(currentJoint.x), zoomedZ(currentJoint.z));
       }
     });
+
+    if (polygonId == addingPoly) ctx.lineTo(mouse.x, mouse.y);
+
     ctx.closePath();
 
     //get type from config
@@ -703,10 +706,10 @@ function renderAllText() {
     if (polygon.name == undefined) return;
     let sumX = 0;
     let sumY = 0;
-    let left = joints[polygon.joints[0]].x;
-    let top = joints[polygon.joints[0]].z;
-    let right = joints[polygon.joints[0]].x;
-    let bottom = joints[polygon.joints[0]].z;
+    let left = Infinity;
+    let top = Infinity;
+    let right = -Infinity;
+    let bottom = -Infinity;
     let count = 0;
     polygon.joints.forEach((joint) => {
       let currentJoint = joints[joint];
@@ -922,6 +925,23 @@ async function processEditorClick() {
     lines[addingLine].joints.push(newJoint.id);
   }
 
+  if (addingPoly) {
+    let newJoint = doc(collection(db, "joints"));
+
+    docsToSave.push({
+      id: newJoint.id,
+      collection: "joints",
+      source: joints,
+    });
+
+    joints[newJoint.id] = {
+      x: mouse.rx,
+      z: mouse.rz,
+    };
+
+    polygons[addingPoly].joints.push(newJoint.id);
+  }
+
   requestAnimationFrame(animate);
 }
 
@@ -941,6 +961,26 @@ export function addLine() {
   };
 
   addingLine = newLine.id;
+
+  requestAnimationFrame(animate);
+}
+
+export function addPoly() {
+  let newPoly = doc(collection(db, "polygons"));
+
+  docsToSave.push({
+    id: newPoly.id,
+    collection: "polygons",
+    source: polygons,
+  });
+
+  polygons[newPoly.id] = {
+    type: polygons[Object.keys(polygons)[0]].type,
+    name: "New Poly",
+    joints: [],
+  };
+
+  addingPoly = newPoly.id;
 
   requestAnimationFrame(animate);
 }
