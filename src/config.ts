@@ -1,5 +1,15 @@
 type ApplicationType = "polygon" | "line" | "any" | "none";
 
+/**
+ * Joints are points, used to make lines and components
+ */
+export interface VisualType {
+  appliesTo: ApplicationType;
+  name: string;
+  description: string;
+  appearances: Appearance[];
+}
+
 interface Appearance {
   darkMode: boolean;
   lightMode: boolean;
@@ -11,16 +21,6 @@ interface Appearance {
   properties: {
     [key: string]: string;
   }[];
-}
-
-/**
- * Joints are points, used to make lines and components
- */
-export interface VisualType {
-  appliesTo: ApplicationType;
-  name: string;
-  description: string;
-  appearances: Appearance[];
 }
 
 export type VisualTypes = {
