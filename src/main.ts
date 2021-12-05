@@ -1,5 +1,5 @@
 import { logApp, signIn, signOut } from "./auth";
-import { initRenderer, addLine, addPoly, finishAdding } from "./renderer";
+import { initRenderer, addLine, addPoly, finishAdding } from "./canvas";
 
 initRenderer();
 

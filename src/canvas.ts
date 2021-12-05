@@ -15,6 +15,8 @@ import {
   onSnapshot,
   doc,
 } from "firebase/firestore";
+import { getDatabase, ref, onValue, push, child, set } from "firebase/database";
+import { getTileUrl } from "./util";
 
 // globals
 // canvas and ctx
@@ -36,14 +38,21 @@ let docsToSave: {
 let saveTimeout: any;
 let addingLine: string;
 let addingPoly: string;
+let rendered: string[] = [];
+let dynmapTiles: {
+  [key: string]: HTMLImageElement;
+} = {};
+let worldId = "horizons";
 
 // consts
-const db = getFirestore();
+const firestore = getFirestore();
+const database = getDatabase();
 canvas.width = innerWidth;
 canvas.height = innerHeight;
+const databaseType: "realtime" | "firestore" = "realtime";
 
 // lets
-let fontSize = 15;
+let fontSize = 20;
 let textAreas: DOMRect[] = [];
 let editing = false;
 let mouse = {
@@ -51,7 +60,7 @@ let mouse = {
   y: 0,
   rx: 0,
   rz: 0,
-  button: 0,
+  button: -1,
   bounds: canvas.getBoundingClientRect(),
 };
 
@@ -140,9 +149,9 @@ function zoomedZ_INV(number: any) {
 function move(e: MouseEvent) {
   // mouse move event
   if (e.type === "mousedown") {
-    mouse.button = 1;
+    mouse.button = e.button;
   } else if (e.type === "mouseup" || e.type === "mouseout") {
-    mouse.button = 0;
+    mouse.button = -1;
   }
 
   mouse.bounds = canvas.getBoundingClientRect();
@@ -157,7 +166,7 @@ function move(e: MouseEvent) {
   if (addingLine || addingPoly) requestAnimationFrame(animate);
 
   if (editorProcessMouse())
-    if (mouse.button === 1) {
+    if (mouse.button === 0) {
       // is mouse button down
       wx -= mouse.rx - xx; // move the world origin by the distance
       // moved in world coords
@@ -171,9 +180,9 @@ function move(e: MouseEvent) {
 
 function trackWheel(e) {
   if (e.deltaY < 0) {
-    scale = Math.min(100, scale * 1.1); // zoom in
+    scale = Math.min(5, scale * 1.1); // zoom in
   } else {
-    scale = Math.max(0.01, scale * (1 / 1.1)); // zoom out is inverse of zoom in
+    scale = Math.max(1 / 100, scale * (1 / 1.1)); // zoom out is inverse of zoom in
   }
 
   wx = mouse.rx; // set world origin
@@ -244,6 +253,8 @@ function viewTimings() {
 
 // setInterval(viewTimings, 1000);
 
+/* ---- RENDERING ENGINE ---- */
+
 /**
  * retinaFix - adjust the canvas to be resolution independent
  */
@@ -287,6 +298,13 @@ function animate() {
 
   timings("clearRect");
 
+  //draw dynmap
+  timings("drawMap");
+
+  renderMap();
+
+  timings("drawMap");
+
   //handle drawing
   timings("drawPolygons");
   drawPolygons();
@@ -310,6 +328,8 @@ function animate() {
  */
 function setProperties(properties: { [key: string]: any }) {
   if (!ctx || properties == undefined) return;
+
+  console.log("PROPERTIES", properties);
 
   let propertiesToChange = Object.keys(properties);
   propertiesToChange.forEach((property) => {
@@ -386,10 +406,17 @@ function drawPolygons() {
     ) {
       continue;
     }
+
+    rendered.push(polygonId);
+
     //draw shape
     ctx.beginPath();
+
+    console.log("starting path");
+
     polygon.joints.forEach((joint, i) => {
       let currentJoint = joints[joint];
+      console.log(joint, currentJoint);
       if (i == 0) {
         ctx.moveTo(zoomedX(currentJoint.x), zoomedZ(currentJoint.z));
       } else {
@@ -397,23 +424,35 @@ function drawPolygons() {
       }
     });
 
+    console.log("finished path");
+
     if (polygonId == addingPoly) ctx.lineTo(mouse.x, mouse.y);
 
     ctx.closePath();
 
     //get type from config
     let appearanceList = types[polygon.type]?.appearances;
+
+    console.log("type", polygon.type);
+    console.log(types);
+
     if (appearanceList == undefined) return;
+
+    console.log("ready to paint");
 
     //paint type to canvas
     appearanceList.forEach((appearance) => {
       // TODO check dark mode
       // TODO check zoom
 
+      console.log("appearance", appearance);
+
       let numLayers = Math.max(
         appearance.properties.length,
         appearance.functions.length
       );
+
+      console.log("layers to paint:", numLayers);
 
       for (let i = 0; i < numLayers; i++) {
         ctx.save();
@@ -422,6 +461,8 @@ function drawPolygons() {
         setProperties(appearance.functions[i]);
 
         // TODO function ovverrides
+
+        console.log("painting");
 
         ctx.fill();
         ctx.stroke();
@@ -475,6 +516,8 @@ function drawLines() {
         continue;
       }
 
+      rendered.push(lineId);
+
       //draw line
       ctx.beginPath();
       line.joints.forEach((joint, i) => {
@@ -488,7 +531,6 @@ function drawLines() {
       });
 
       if (addingLine == lineId) {
-        console.log(mouse.x, mouse.y);
         ctx.lineTo(mouse.x, mouse.y);
       }
 
@@ -549,20 +591,39 @@ function applyRotationToText(
 
   let textWidth = ctx.measureText(text).width;
 
-  //get top right corner
-  let px = textWidth / 2;
-  let py = fontSize / 2;
+  // get all corners (we only need two)
+  let points = [
+    { x: textWidth / 2, y: fontSize / 2 },
+    { x: -textWidth / 2, y: fontSize / 2 },
+    { x: -textWidth / 2, y: -fontSize / 2 },
+    { x: textWidth / 2, y: -fontSize / 2 },
+  ];
 
-  //rotate it
-  let rx = px * Math.cos(rotation) - py * Math.sin(rotation);
-  let ry = py * Math.cos(rotation) - px * Math.sin(rotation);
+  let finalRect = {
+    top: Infinity,
+    left: Infinity,
+    bottom: -Infinity,
+    right: -Infinity,
+  };
+
+  points.forEach((point) => {
+    //rotate it
+    let rx = point.x * Math.cos(rotation) - point.y * Math.sin(rotation);
+    let ry = point.y * Math.cos(rotation) - point.x * Math.sin(rotation);
+
+    //set rect accordingly
+    finalRect.top = Math.min(z + ry, finalRect.top);
+    finalRect.left = Math.min(x + rx, finalRect.left);
+    finalRect.bottom = Math.max(z + ry, finalRect.bottom);
+    finalRect.right = Math.max(x + rx, finalRect.right);
+  });
 
   // that's all we need, now calculate the bounding box
   return new DOMRect(
-    x - rx,
-    z - Math.abs(ry),
-    Math.abs(2 * rx),
-    Math.abs(2 * ry)
+    finalRect.left,
+    finalRect.top,
+    finalRect.right - finalRect.left,
+    finalRect.bottom - finalRect.top
   );
 }
 
@@ -638,14 +699,18 @@ function fillText(text: string, x: number, z: number, rotation: number) {
 
   ctx.save();
 
+  ctx.strokeStyle = "#0f0";
+  ctx.strokeRect(newRect.x, newRect.y, newRect.width, newRect.height);
+
   ctx.translate(x, z); //translate to center of shape
   //  ctx.rotate((Math.PI / 180) * rotation); //rotate in degrees.
   ctx.rotate(rotation); //rotate in radians
   ctx.translate(-x, -z); //translate center back to 0,0
 
   ctx.textBaseline = "middle";
-  ctx.fillStyle = "#000";
+  ctx.fillStyle = "#222";
   ctx.strokeStyle = "#eee";
+  ctx.lineWidth = 2;
   ctx.textAlign = "center";
 
   ctx.strokeText(text, x, z);
@@ -697,6 +762,8 @@ function renderAllText() {
 
   // draw polygons first
   for (let polygonId in polygons) {
+    if (!rendered.includes(polygonId)) continue;
+
     let polygon = polygons[polygonId]; //find the bounding box of the polygon
     if (polygon.name == undefined) return;
     let sumX = 0;
@@ -706,6 +773,7 @@ function renderAllText() {
     let right = -Infinity;
     let bottom = -Infinity;
     let count = 0;
+
     polygon.joints.forEach((joint) => {
       let currentJoint = joints[joint];
 
@@ -723,12 +791,14 @@ function renderAllText() {
       isOnScreen(new DOMRect(left, top, right - left, bottom - top)) &&
       bottom - top > fontSize &&
       right - left > zoomed_INV(ctx.measureText(polygon.name).width)
-    )
+    ) {
       fillText(polygon.name, sumX / count, sumY / count, 0);
+    }
   }
 
   //draw line texts
   for (let lineId in lines) {
+    if (!rendered.includes(lineId)) continue;
     let line = lines[lineId];
 
     if (line.name == undefined) return;
@@ -752,8 +822,10 @@ function renderAllText() {
 
     let remainder = totalDistance % textSpace;
 
+    let numLines = Math.round(totalDistance / textSpace / 2) * 2 + 1;
+
     //calculate positions of texts and draw them
-    for (let i = 0; i <= totalDistance / textSpace; i++) {
+    for (let i = 0; i <= numLines; i++) {
       let offset = textSpace * i - textSpace / 2;
       offset += remainder / 2;
 
@@ -795,57 +867,101 @@ function renderAllText() {
   }
 }
 
+function renderTilesInRange(rect: DOMRect, zoom: number) {
+  let hasLoadedInFrame = false;
+
+  let tileWidth = 2 ** (8 - zoom) * 32;
+
+  for (
+    let x = zoomedX_INV(rect.left);
+    x < zoomedX_INV(rect.right) + tileWidth;
+    x += tileWidth
+  ) {
+    for (
+      let z = zoomedZ_INV(rect.top);
+      z < zoomedZ_INV(rect.bottom) + tileWidth;
+      z += tileWidth
+    ) {
+      let actualX = Math.floor(x / tileWidth) * tileWidth;
+      let actualZ = Math.floor(z / tileWidth) * tileWidth;
+
+      let tile = getTileUrl({
+        x: Math.floor(x / tileWidth),
+        z: Math.floor(z / tileWidth),
+        zoom,
+      });
+
+      if (dynmapTiles[tile.id] == undefined) {
+        if (!hasLoadedInFrame) {
+          dynmapTiles[tile.id] = new Image();
+          dynmapTiles[tile.id].src = tile.url;
+          dynmapTiles[tile.id].onload = function () {
+            requestAnimationFrame(animate);
+          };
+        }
+      } else {
+        try {
+          ctx.drawImage(
+            dynmapTiles[tile.id],
+            zoomedX(actualX),
+            zoomedZ(actualZ),
+            zoomed(tileWidth),
+            zoomed(tileWidth)
+          );
+        } catch {
+          ctx.fillStyle = "#000";
+          ctx.fillRect(
+            zoomedX(actualX),
+            zoomedZ(actualZ),
+            zoomed(tileWidth),
+            zoomed(tileWidth)
+          );
+        }
+      }
+    }
+  }
+}
+
+function nextPowerOfTwo(n) {
+  let k = 1;
+  while (k < n) {
+    k = k << 1;
+  }
+  return k;
+}
+
+function renderMap() {
+  let desiredTileWidth = zoomed_INV(100);
+
+  let neededTileWidth = nextPowerOfTwo(desiredTileWidth);
+
+  let zoom = -Math.log2(neededTileWidth / 32) + 8;
+
+  zoom = Math.min(8, zoom);
+  zoom = Math.max(1, zoom);
+
+  for (let i = 1; i <= zoom; i++) {
+    renderTilesInRange(canvas.getBoundingClientRect(), i);
+  }
+}
+
 /**
  * setDefaultStyles - load default styles into ctx
  */
 function setDefaultStyles() {
-  if (ctx) ctx.font = `${fontSize}px arial`;
+  if (!ctx) return;
+  ctx.font = `${fontSize}px Manrope`;
+  ctx.imageSmoothingEnabled = false;
 }
 
 export function initRenderer() {
-  loadFirestore();
+  loadDatabase();
   retinaFix();
   setDefaultStyles();
   startEditing();
 }
 
-function loadFirestore() {
-  onSnapshot(collection(db, "joints"), (res) => {
-    res.forEach((doc) => {
-      console.log("JOINT", doc.id, doc.data());
-
-      joints[doc.id] = doc.data() as Joint;
-    });
-    requestAnimationFrame(animate);
-  });
-
-  onSnapshot(collection(db, "lines"), (res) => {
-    res.forEach((doc) => {
-      console.log("LINE", doc.id, doc.data());
-
-      lines[doc.id] = doc.data() as Line;
-    });
-    requestAnimationFrame(animate);
-  });
-
-  onSnapshot(collection(db, "polygons"), (res) => {
-    res.forEach((doc) => {
-      console.log("POLYGON", doc.id, doc.data());
-
-      polygons[doc.id] = doc.data() as Polygon;
-    });
-    requestAnimationFrame(animate);
-  });
-
-  onSnapshot(collection(db, "types"), (res) => {
-    res.forEach((doc) => {
-      console.log("TYPE", doc.id, doc.data());
-
-      types[doc.id] = doc.data() as VisualType;
-    });
-    requestAnimationFrame(animate);
-  });
-}
+/* ---- EDITING FUNCTIONS ---- */
 
 export function startEditing() {
   editing = true;
@@ -863,7 +979,7 @@ function editorProcessMouse() {
   for (let jointId in joints) {
     let joint = joints[jointId];
     let distance = distanceToJointSquared(joint, mouse.rx, mouse.rz);
-    if (distance < 50 ** 2 && distance < closestDistance) {
+    if (distance < zoomed_INV(10) ** 2 && distance < closestDistance) {
       closestJointId = jointId;
       closestJoint = joint;
       closestDistance = distance;
@@ -874,7 +990,7 @@ function editorProcessMouse() {
     canvas.style.cursor = "unset";
     return true;
   } else {
-    if (mouse.button == 1) {
+    if (mouse.button == 0) {
       canvas.style.cursor = "grabbing";
 
       joints[closestJointId].x = mouse.rx;
@@ -901,38 +1017,38 @@ function editorProcessMouse() {
 
 async function processEditorClick() {
   if (addingLine) {
-    let newJoint = doc(collection(db, "joints"));
+    let newJoint = makeNewJoint();
 
     docsToSave.push({
-      id: newJoint.id,
+      id: newJoint,
       collection: "joints",
       source: joints,
     });
 
-    joints[newJoint.id] = {
+    joints[newJoint] = {
       x: mouse.rx,
       z: mouse.rz,
     };
 
-    lines[addingLine].joints.push(newJoint.id);
+    lines[addingLine].joints.push(newJoint);
     startSave();
   }
 
   if (addingPoly) {
-    let newJoint = doc(collection(db, "joints"));
+    let newJoint = makeNewJoint();
 
     docsToSave.push({
-      id: newJoint.id,
+      id: newJoint,
       collection: "joints",
       source: joints,
     });
 
-    joints[newJoint.id] = {
+    joints[newJoint] = {
       x: mouse.rx,
       z: mouse.rz,
     };
 
-    polygons[addingPoly].joints.push(newJoint.id);
+    polygons[addingPoly].joints.push(newJoint);
     startSave();
   }
 
@@ -940,41 +1056,41 @@ async function processEditorClick() {
 }
 
 export function addLine() {
-  let newLine = doc(collection(db, "lines"));
+  let newLine = makeNewLine();
 
   docsToSave.push({
-    id: newLine.id,
+    id: newLine,
     collection: "lines",
     source: lines,
   });
 
-  lines[newLine.id] = {
+  lines[newLine] = {
     type: lines[Object.keys(lines)[0]].type,
     name: "New Line",
     joints: [],
   };
 
-  addingLine = newLine.id;
+  addingLine = newLine;
 
   requestAnimationFrame(animate);
 }
 
 export function addPoly() {
-  let newPoly = doc(collection(db, "polygons"));
+  let newPoly = makeNewPoly();
 
   docsToSave.push({
-    id: newPoly.id,
+    id: newPoly,
     collection: "polygons",
     source: polygons,
   });
 
-  polygons[newPoly.id] = {
+  polygons[newPoly] = {
     type: polygons[Object.keys(polygons)[0]].type,
     name: "New Poly",
     joints: [],
   };
 
-  addingPoly = newPoly.id;
+  addingPoly = newPoly;
 
   requestAnimationFrame(animate);
 }
@@ -984,28 +1100,168 @@ export function finishAdding() {
   addingPoly = undefined;
 }
 
+/* ---- DATABASE COMMUNICATORS ---- */
+
+function loadDatabase() {
+  if (databaseType == "firestore") {
+    onSnapshot(collection(firestore, "joints"), (res) => {
+      res.forEach((doc) => {
+        console.log("JOINT", doc.id, doc.data());
+
+        joints[doc.id] = doc.data() as Joint;
+      });
+      requestAnimationFrame(animate);
+    });
+
+    onSnapshot(collection(firestore, "lines"), (res) => {
+      res.forEach((doc) => {
+        console.log("LINE", doc.id, doc.data());
+
+        lines[doc.id] = doc.data() as Line;
+      });
+      requestAnimationFrame(animate);
+    });
+
+    onSnapshot(collection(firestore, "polygons"), (res) => {
+      res.forEach((doc) => {
+        console.log("POLYGON", doc.id, doc.data());
+
+        polygons[doc.id] = doc.data() as Polygon;
+      });
+      requestAnimationFrame(animate);
+    });
+
+    onSnapshot(collection(firestore, "types"), (res) => {
+      res.forEach((doc) => {
+        console.log("TYPE", doc.id, doc.data());
+
+        types[doc.id] = doc.data() as VisualType;
+      });
+      requestAnimationFrame(animate);
+    });
+  }
+
+  if (databaseType == "realtime") {
+    console.log("realtime");
+
+    const worldsRef = ref(database, "worlds/" + worldId);
+    onValue(worldsRef, (snapshot) => {
+      const data = snapshot.val();
+
+      console.log(JSON.stringify(data));
+
+      for (let jointId in data.joints) {
+        console.log("JOINT", jointId, data.joints[jointId]);
+
+        joints[jointId] = data.joints[jointId] as Joint;
+      }
+
+      for (let lineId in data.lines) {
+        console.log("LINE", lineId, data.lines[lineId]);
+
+        lines[lineId] = data.lines[lineId] as Line;
+      }
+
+      for (let polygonId in data.polygons) {
+        console.log("POLYGON", polygonId, data.polygons[polygonId]);
+
+        polygons[polygonId] = data.polygons[polygonId] as Polygon;
+      }
+
+      for (let typeId in data.types) {
+        console.log("POLYGON", typeId, data.types[typeId]);
+
+        types[typeId] = data.types[typeId] as VisualType;
+      }
+
+      requestAnimationFrame(animate);
+    });
+  }
+}
+
 function startSave() {
   clearTimeout(saveTimeout);
-  saveTimeout = setTimeout(saveChanges, 1000);
+  saveTimeout = setTimeout(saveChanges, 5000);
   document.getElementById("saveState").textContent = "Saving";
   document.getElementById("saveState").classList.add("saving");
 }
 
 function saveChanges() {
   let waiting = 0;
-  docsToSave.forEach((set) => {
-    waiting++;
-    setDoc(doc(db, set.collection, set.id), set.source[set.id]).then((res) => {
-      waiting--;
 
-      if (waiting <= 0) {
-        document.getElementById("saveState").textContent = "Saved";
-        document.getElementById("saveState").classList.remove("saving");
+  if (databaseType == "firestore") {
+    docsToSave.forEach((set) => {
+      waiting++;
+      setDoc(doc(firestore, set.collection, set.id), set.source[set.id]).then(
+        (res) => {
+          waiting--;
 
-        saveTimeout = setTimeout(hideSaveState, 30 * 1000);
-      }
+          if (waiting <= 0) {
+            document.getElementById("saveState").textContent = "Saved";
+            document.getElementById("saveState").classList.remove("saving");
+
+            saveTimeout = setTimeout(hideSaveState, 30 * 1000);
+          }
+        }
+      );
     });
-  });
+  }
+
+  if (databaseType == "realtime") {
+    docsToSave.forEach((item) => {
+      waiting++;
+
+      set(
+        ref(database, `worlds/${worldId}/${item.collection}/${item.id}`),
+        item.source[item.id]
+      ).then(() => {
+        waiting--;
+
+        if (waiting <= 0) {
+          document.getElementById("saveState").textContent = "Saved";
+          document.getElementById("saveState").classList.remove("saving");
+
+          saveTimeout = setTimeout(hideSaveState, 30 * 1000);
+        }
+      });
+    });
+  }
+}
+
+function makeNewJoint() {
+  if (databaseType == "firestore") {
+    return doc(collection(firestore, "joints")).id;
+  }
+  if (databaseType == "realtime") {
+    return push(child(ref(database, "worlds/" + worldId), "joints")).key;
+  }
+}
+
+function makeNewLine() {
+  if (databaseType == "firestore") {
+    return doc(collection(firestore, "lines")).id;
+  }
+  if (databaseType == "realtime") {
+    return push(child(ref(database, "worlds/" + worldId), "lines")).key;
+  }
+}
+
+function makeNewPoly() {
+  if (databaseType == "firestore") {
+    return doc(collection(firestore, "polygons")).id;
+  }
+  if (databaseType == "realtime") {
+    return push(child(ref(database, "worlds/" + worldId), "polygons")).key;
+  }
+}
+
+function makeNewType() {
+  if (databaseType == "firestore") {
+    return doc(collection(firestore, "types")).id;
+  }
+  if (databaseType == "realtime") {
+    return push(child(ref(database, "worlds/" + worldId), "types")).key;
+  }
 }
 
 function hideSaveState() {

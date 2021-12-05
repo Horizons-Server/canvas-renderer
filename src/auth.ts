@@ -8,6 +8,7 @@ import {
   collection,
   onSnapshot,
 } from "firebase/firestore";
+import { getDatabase } from "firebase/database";
 
 // TODO: Add SDKs for Firebase products that you want to use
 // https://firebase.google.com/docs/web/setup#available-libraries
@@ -29,7 +30,6 @@ const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
 const provider = new GoogleAuthProvider();
 const auth = getAuth();
-const db = getFirestore();
 
 auth.onAuthStateChanged((user) => {
   if (user) {
@@ -47,9 +47,6 @@ auth.onAuthStateChanged((user) => {
 });
 
 export async function logApp() {
-  console.log(app);
-  console.log(db);
-
   // const querySnapshot = await getDocs(collection(db, "joints"));
   // querySnapshot.forEach((doc) => {
   //   console.log(`${doc.id} => ${JSON.stringify(doc.data())}`);
@@ -82,9 +79,3 @@ export function signIn() {
 export function signOut() {
   auth.signOut();
 }
-
-onSnapshot(collection(db, "joints"), (res) => {
-  res.forEach((doc) => {
-    console.log(`${doc.id} => ${JSON.stringify(doc.data())}`);
-  });
-});
