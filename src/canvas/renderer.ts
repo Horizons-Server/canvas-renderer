@@ -7,7 +7,7 @@ import {
   Lines,
   VisualType,
   VisualTypes,
-} from "./config";
+} from "../database/types";
 import {
   setDoc,
   getFirestore,
@@ -16,7 +16,7 @@ import {
   doc,
 } from "firebase/firestore";
 import { getDatabase, ref, onValue, push, child, set } from "firebase/database";
-import { getTileUrl } from "./util";
+import { getTileUrl } from "./dynmap";
 
 // globals
 // canvas and ctx
@@ -249,9 +249,9 @@ function viewTimings() {
     "background-color: #ff8787; font-weight: bold"
   );
   console.table(perfMax);
-}
 
-// setInterval(viewTimings, 1000);
+  setTimeout(viewTimings, 1000);
+}
 
 /* ---- RENDERING ENGINE ---- */
 

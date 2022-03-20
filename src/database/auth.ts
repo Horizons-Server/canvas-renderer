@@ -1,17 +1,6 @@
-// Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { getAuth, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
-import {
-  getFirestore,
-  getDocs,
-  collection,
-  onSnapshot,
-} from "firebase/firestore";
-import { getDatabase } from "firebase/database";
-
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
 
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
@@ -45,13 +34,6 @@ auth.onAuthStateChanged((user) => {
     document.getElementById("signOut").style.display = "none";
   }
 });
-
-export async function logApp() {
-  // const querySnapshot = await getDocs(collection(db, "joints"));
-  // querySnapshot.forEach((doc) => {
-  //   console.log(`${doc.id} => ${JSON.stringify(doc.data())}`);
-  // });
-}
 
 export function signIn() {
   signInWithPopup(auth, provider)

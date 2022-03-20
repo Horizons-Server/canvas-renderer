@@ -1,5 +1,10 @@
-import { logApp, signIn, signOut } from "./auth";
-import { initRenderer, addLine, addPoly, finishAdding } from "./canvas";
+import { signIn, signOut } from "./database/auth";
+import {
+  initRenderer,
+  addLine,
+  addPoly,
+  finishAdding,
+} from "./canvas/renderer";
 
 initRenderer();
 
@@ -26,5 +31,3 @@ document.querySelector("#newPoly").addEventListener("click", function () {
 document.querySelector("#doneAdding").addEventListener("click", function () {
   finishAdding();
 });
-
-logApp();
